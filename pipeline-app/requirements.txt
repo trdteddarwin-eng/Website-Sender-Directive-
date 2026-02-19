@@ -1,0 +1,8 @@
+flask>=3.0.0
+python-dotenv>=1.0.0
+gspread>=6.0.0
+apscheduler>=3.10.0
+requests>=2.32.0
+google-auth>=2.36.0
+google-auth-oauthlib>=1.2.0
+google-api-python-client>=2.160.0

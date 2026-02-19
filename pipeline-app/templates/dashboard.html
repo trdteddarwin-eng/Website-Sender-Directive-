@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — TedCA Pipeline{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Dashboard</h2>
+    <div class="subtitle">Pipeline overview and today's tasks</div>
+  </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="kpi-grid">
+  <div class="kpi-card accent">
+    <div class="kpi-label">Hot Leads</div>
+    <div class="kpi-value">{{ counts.hot }}</div>
+    <div class="kpi-sub">{{ counts.total }} total leads</div>
+  </div>
+  <div class="kpi-card blue">
+    <div class="kpi-label">Processing Today</div>
+    <div class="kpi-value">{{ counts.processing }}</div>
+    <div class="kpi-sub">{{ counts.completed }} completed</div>
+  </div>
+  <div class="kpi-card green">
+    <div class="kpi-label">Active Sequences</div>
+    <div class="kpi-value">{{ due_sequences|length }}</div>
+    <div class="kpi-sub">due today</div>
+  </div>
+  <div class="kpi-card purple">
+    <div class="kpi-label">Reply Rate</div>
+    <div class="kpi-value">{{ email_stats.reply_rate }}%</div>
+    <div class="kpi-sub">{{ email_stats.replied }} replies / {{ email_stats.sent }} sent</div>
+  </div>
+</div>
+
+<!-- Charts + Today's sends -->
+<div class="grid-2 mb-6">
+  <!-- Throughput Chart -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Pipeline Throughput (30 days)</div>
+    </div>
+    <div class="chart-container">
+      <canvas id="throughput-chart"></canvas>
+    </div>
+  </div>
+
+  <!-- Today's Follow-ups -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Today's Follow-ups</div>
+    </div>
+    {% if due_sequences %}
+    <div style="max-height: 250px; overflow-y: auto;">
+      {% for seq in due_sequences %}
+      <div class="activity-item">
+        <div>
+          <div style="font-weight: 600;">{{ seq._lead.company_name if seq._lead else seq.slug }}</div>
+          <div class="text-dim text-sm">Touch {{ seq.current_touchpoint }} — {{ seq._lead.first_name if seq._lead else '' }}</div>
+        </div>
+        {% if seq._email %}
+        <div class="ml-auto flex gap-2">
+          <button class="btn btn-sm btn-ghost" onclick="previewEmail('{{ seq._email.id }}')">Preview</button>
+          <button class="btn btn-sm btn-primary" onclick="sendEmail('{{ seq._email.id }}')">Send</button>
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p>No follow-ups due today</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Recent Activity</div>
+  </div>
+  {% if activity %}
+  <ul class="activity-feed" style="max-height: 300px; overflow-y: auto;">
+    {% for item in activity %}
+    <li class="activity-item">
+      <span class="activity-time">{{ item.created_at[:16] if item.created_at else '' }}</span>
+      <span class="activity-agent">{{ item.agent or '' }}</span>
+      <span class="activity-msg">{{ item.message or item.event_type }}</span>
+      {% if item.slug %}<a href="/leads/{{ item.slug }}" class="text-sm text-dim" style="margin-left: auto;">{{ item.slug }}</a>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="empty-state">
+    <p>No activity yet. Run the pipeline to get started.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script>
+  const throughputData = {{ throughput | tojson }};
+  initDashboard(throughputData);
+</script>
+{% endblock %}

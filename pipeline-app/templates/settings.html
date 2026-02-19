@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% block title %}Settings — TedCA Pipeline{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Settings</h2>
+    <div class="subtitle">Configuration and integrations</div>
+  </div>
+</div>
+
+<!-- Connection Status Cards -->
+<div class="kpi-grid mb-6">
+  <div class="kpi-card {{ 'green' if sheets_configured else 'red' }}">
+    <div class="kpi-label">Google Sheets</div>
+    <div class="kpi-value" style="font-size: 16px;">
+      <span class="status-dot {{ 'green' if sheets_configured else 'red' }}"></span>
+      {{ 'Connected' if sheets_configured else 'Not Configured' }}
+    </div>
+    <div class="kpi-sub">
+      {% if sheets_configured %}
+        {{ sheets_lead_count }} leads loaded
+      {% else %}
+        token.json not found — run OAuth flow
+      {% endif %}
+    </div>
+  </div>
+  <div class="kpi-card {{ 'green' if gmail_ok else 'red' }}">
+    <div class="kpi-label">Gmail OAuth</div>
+    <div class="kpi-value" style="font-size: 16px;">
+      <span class="status-dot {{ 'green' if gmail_ok else 'red' }}"></span>
+      {{ 'Authorized' if gmail_ok else 'Not Connected' }}
+    </div>
+    <div class="kpi-sub">
+      {% if gmail_ok and gmail_email %}
+        {{ gmail_email }}
+      {% else %}
+        Run OAuth flow to connect Gmail
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- API Keys Table -->
+<div class="card mb-6">
+  <div class="card-header">
+    <div class="card-title">API Keys</div>
+  </div>
+  {% for key_name, key_val in keys.items() %}
+  <div class="settings-row">
+    <div class="settings-label">{{ key_name }}</div>
+    <div class="settings-value">
+      {% if key_val and key_val != '(not set)' %}
+        <span style="color: var(--green);">{{ key_val }}</span>
+      {% else %}
+        <span style="color: var(--red);">(not set)</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  <div style="padding: 12px 0 4px; font-size: 12px; color: var(--text-dim);">
+    API keys are loaded from <code style="background: var(--bg-raised); padding: 2px 6px; border-radius: 4px; font-family: var(--mono);">.env</code> in the workspace root. Edit that file to update keys.
+  </div>
+</div>
+
+<!-- Test Connections -->
+<div class="card mb-6">
+  <div class="card-header">
+    <div class="card-title">Test Connections</div>
+  </div>
+
+  <div class="settings-row">
+    <div>
+      <div class="settings-label">Google Sheets Connection</div>
+      <div class="text-dim text-sm" style="margin-top: 2px;">Verifies sheet access and returns lead count</div>
+    </div>
+    <div class="flex gap-2 items-center">
+      <span id="sheets-result" class="text-sm"></span>
+      <button class="btn btn-sm btn-ghost" id="btn-test-sheets" onclick="testSheets()">Test Connection</button>
+    </div>
+  </div>
+
+  <div class="settings-row">
+    <div>
+      <div class="settings-label">Gmail OAuth</div>
+      <div class="text-dim text-sm" style="margin-top: 2px;">Checks Gmail API token validity</div>
+    </div>
+    <div class="flex gap-2 items-center">
+      <span id="gmail-result" class="text-sm"></span>
+      <button class="btn btn-sm btn-ghost" id="btn-test-gmail" onclick="testGmail()">Test Connection</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import Leads -->
+<div class="card mb-6">
+  <div class="card-header">
+    <div class="card-title">Import Leads from JSON</div>
+  </div>
+  <div style="padding: 8px 0;">
+    <div class="text-dim text-sm mb-4">
+      Provide the absolute file path to a JSON file containing lead records. Each record should have at minimum: <code style="background: var(--bg-raised); padding: 2px 6px; border-radius: 4px; font-family: var(--mono);">company_name</code>, <code style="background: var(--bg-raised); padding: 2px 6px; border-radius: 4px; font-family: var(--mono);">email</code>, <code style="background: var(--bg-raised); padding: 2px 6px; border-radius: 4px; font-family: var(--mono);">first_name</code>.
+    </div>
+    <div class="flex gap-2 items-center">
+      <input type="text" class="search-input" id="import-filepath" placeholder="/path/to/leads.json" style="flex: 1;">
+      <button class="btn btn-primary" id="btn-import" onclick="importLeads()">Import Leads</button>
+    </div>
+    <div id="import-result" style="margin-top: 12px;"></div>
+  </div>
+</div>
+
+<!-- Data Info -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Data Sources</div>
+  </div>
+  <div style="padding: 8px 0;">
+    <div class="text-dim text-sm mb-4">
+      Lead data is read directly from Google Sheets. Operational data (pipeline runs, emails, sequences) is stored locally in JSON files.
+    </div>
+    <div style="background: var(--bg-raised); border: 1px solid var(--card-border); border-radius: 8px; padding: 16px; font-family: var(--mono); font-size: 12px; color: var(--text-dim); line-height: 1.8;">
+      <div><strong>Leads:</strong> Google Sheets (479 leads)</div>
+      <div><strong>Pipeline data:</strong> .tmp/pipeline-data/*.json</div>
+      <div><strong>OAuth token:</strong> token.json (workspace root)</div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  /* ── Test Google Sheets ── */
+  function testSheets() {
+    const btn = document.getElementById('btn-test-sheets');
+    const result = document.getElementById('sheets-result');
+    btn.disabled = true;
+    btn.textContent = 'Testing...';
+    result.textContent = '';
+
+    fetch('/api/settings/test-sheets')
+      .then(r => r.json())
+      .then(data => {
+        btn.disabled = false;
+        btn.textContent = 'Test Connection';
+        if (data.ok) {
+          result.innerHTML = '<span style="color: var(--green);">Connected — ' + data.lead_count + ' leads</span>';
+          showToast('Google Sheets connected (' + data.lead_count + ' leads)', 'success');
+        } else {
+          result.innerHTML = '<span style="color: var(--red);">Failed: ' + escapeHtml(data.error || 'Unknown error') + '</span>';
+          showToast('Google Sheets test failed', 'error');
+        }
+      })
+      .catch(err => {
+        btn.disabled = false;
+        btn.textContent = 'Test Connection';
+        result.innerHTML = '<span style="color: var(--red);">Error: ' + escapeHtml(err.message) + '</span>';
+        showToast('Connection error', 'error');
+      });
+  }
+
+  /* ── Test Gmail ── */
+  function testGmail() {
+    const btn = document.getElementById('btn-test-gmail');
+    const result = document.getElementById('gmail-result');
+    btn.disabled = true;
+    btn.textContent = 'Testing...';
+    result.textContent = '';
+
+    fetch('/api/settings/test-gmail')
+      .then(r => r.json())
+      .then(data => {
+        btn.disabled = false;
+        btn.textContent = 'Test Connection';
+        if (data.ok) {
+          result.innerHTML = '<span style="color: var(--green);">Authorized — ' + escapeHtml(data.email || '') + '</span>';
+          showToast('Gmail authorized', 'success');
+        } else {
+          result.innerHTML = '<span style="color: var(--red);">Failed: ' + escapeHtml(data.error || 'Token not found') + '</span>';
+          showToast('Gmail test failed', 'error');
+        }
+      })
+      .catch(err => {
+        btn.disabled = false;
+        btn.textContent = 'Test Connection';
+        result.innerHTML = '<span style="color: var(--red);">Error: ' + escapeHtml(err.message) + '</span>';
+        showToast('Connection error', 'error');
+      });
+  }
+
+  /* ── Import Leads ── */
+  function importLeads() {
+    const filepath = document.getElementById('import-filepath').value.trim();
+    if (!filepath) {
+      showToast('Enter a file path', 'error');
+      return;
+    }
+
+    const btn = document.getElementById('btn-import');
+    const result = document.getElementById('import-result');
+    btn.disabled = true;
+    btn.textContent = 'Importing...';
+    result.innerHTML = '';
+
+    fetch('/api/leads/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filepath: filepath }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      btn.disabled = false;
+      btn.textContent = 'Import Leads';
+
+      if (data.ok) {
+        let html = '<div style="padding: 12px; background: var(--green-dim); border-radius: 8px; font-size: 13px;">';
+        html += '<div style="font-weight: 600; color: var(--green); margin-bottom: 4px;">Import Complete</div>';
+        html += '<div>Imported: <strong>' + data.imported + '</strong></div>';
+        html += '<div>Skipped (duplicates): <strong>' + data.skipped + '</strong></div>';
+        if (data.errors && data.errors.length > 0) {
+          html += '<div style="margin-top: 8px; color: var(--red);">Errors (' + data.errors.length + '):</div>';
+          html += '<ul style="padding-left: 16px; margin: 4px 0 0;">';
+          data.errors.forEach(function(e) {
+            html += '<li style="font-size: 12px; color: var(--text-dim);">' + escapeHtml(e) + '</li>';
+          });
+          html += '</ul>';
+        }
+        html += '</div>';
+        result.innerHTML = html;
+        showToast('Imported ' + data.imported + ' leads', 'success');
+      } else {
+        result.innerHTML = '<div style="padding: 12px; background: var(--red-dim); border-radius: 8px; font-size: 13px; color: var(--red);">Error: ' + escapeHtml(data.error || 'Unknown') + '</div>';
+        showToast('Import failed', 'error');
+      }
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.textContent = 'Import Leads';
+      result.innerHTML = '<div style="padding: 12px; background: var(--red-dim); border-radius: 8px; font-size: 13px; color: var(--red);">Error: ' + escapeHtml(err.message) + '</div>';
+      showToast('Import error', 'error');
+    });
+  }
+
+  /* ── Helper ── */
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+</script>
+{% endblock %}

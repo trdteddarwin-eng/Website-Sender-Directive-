@@ -1,0 +1,48 @@
+{
+  "accounts": [
+    {
+      "email": "ted@tedca.com",
+      "smtp_host": "smtp.gmail.com",
+      "smtp_port": 587,
+      "username": "ted@tedca.com",
+      "password": "PASTE_APP_PASSWORD_HERE",
+      "display_name": "Ted",
+      "daily_limit": 50,
+      "provider": "google_workspace",
+      "active": true
+    },
+    {
+      "email": "ted@gettedca.com",
+      "smtp_host": "smtp.zoho.com",
+      "smtp_port": 587,
+      "username": "ted@gettedca.com",
+      "password": "PASTE_PASSWORD_HERE",
+      "display_name": "Ted",
+      "daily_limit": 50,
+      "provider": "zoho",
+      "active": true
+    },
+    {
+      "email": "hello@gettedca.com",
+      "smtp_host": "smtp.zoho.com",
+      "smtp_port": 587,
+      "username": "hello@gettedca.com",
+      "password": "PASTE_PASSWORD_HERE",
+      "display_name": "Ted from TedCA",
+      "daily_limit": 50,
+      "provider": "zoho",
+      "active": true
+    },
+    {
+      "email": "team@gettedca.com",
+      "smtp_host": "smtp.zoho.com",
+      "smtp_port": 587,
+      "username": "team@gettedca.com",
+      "password": "PASTE_PASSWORD_HERE",
+      "display_name": "TedCA Team",
+      "daily_limit": 50,
+      "provider": "zoho",
+      "active": true
+    }
+  ]
+}

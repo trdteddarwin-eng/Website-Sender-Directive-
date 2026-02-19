@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Leads — TedCA Pipeline{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Leads</h2>
+    <div class="subtitle">{{ total }} leads in database</div>
+  </div>
+  <div class="flex gap-2">
+    <button class="btn btn-ghost" onclick="window.location.href='/leads?sort=lead_score&dir=desc'">Reset Filters</button>
+  </div>
+</div>
+
+<!-- Toolbar: filters + search -->
+<div class="toolbar">
+  <select id="filter-tier" onchange="applyFilters()">
+    <option value="">All Tiers</option>
+    <option value="hot" {{ 'selected' if tier == 'hot' }}>Hot</option>
+    <option value="warm" {{ 'selected' if tier == 'warm' }}>Warm</option>
+    <option value="cold" {{ 'selected' if tier == 'cold' }}>Cold</option>
+  </select>
+
+  <select id="filter-status" onchange="applyFilters()">
+    <option value="">All Statuses</option>
+    <option value="pending" {{ 'selected' if status == 'pending' }}>Pending</option>
+    <option value="processing" {{ 'selected' if status == 'processing' }}>Processing</option>
+    <option value="completed" {{ 'selected' if status == 'completed' }}>Completed</option>
+    <option value="failed" {{ 'selected' if status == 'failed' }}>Failed</option>
+  </select>
+
+  <input type="text" class="search-input" id="search-input" placeholder="Search company or contact..."
+         value="{{ search }}" onkeydown="if(event.key==='Enter') applyFilters()">
+  <button class="btn btn-sm btn-ghost" onclick="applyFilters()">Search</button>
+
+  <div class="ml-auto text-dim text-sm">
+    Page {{ page }} of {{ total_pages }}
+  </div>
+</div>
+
+<!-- Leads Table -->
+<div class="table-container">
+  <table>
+    <thead>
+      <tr>
+        <th onclick="sortBy('lead_score')">
+          Score
+          {% if sort == 'lead_score' %}
+            <span>{{ '&#9650;' if dir == 'asc' else '&#9660;' }}</span>
+          {% endif %}
+        </th>
+        <th onclick="sortBy('company_name')">
+          Company
+          {% if sort == 'company_name' %}
+            <span>{{ '&#9650;' if dir == 'asc' else '&#9660;' }}</span>
+          {% endif %}
+        </th>
+        <th onclick="sortBy('first_name')">
+          Contact
+          {% if sort == 'first_name' %}
+            <span>{{ '&#9650;' if dir == 'asc' else '&#9660;' }}</span>
+          {% endif %}
+        </th>
+        <th onclick="sortBy('city')">
+          City / State
+          {% if sort == 'city' %}
+            <span>{{ '&#9650;' if dir == 'asc' else '&#9660;' }}</span>
+          {% endif %}
+        </th>
+        <th>Tier</th>
+        <th onclick="sortBy('status')">
+          Status
+          {% if sort == 'status' %}
+            <span>{{ '&#9650;' if dir == 'asc' else '&#9660;' }}</span>
+          {% endif %}
+        </th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for lead in leads %}
+      <tr>
+        <td>
+          <span class="text-mono" style="font-weight: 700; font-size: 15px;">{{ lead.lead_score or 0 }}</span>
+        </td>
+        <td>
+          <div style="font-weight: 600;">{{ lead.company_name or '—' }}</div>
+          {% if lead.website %}
+          <div class="text-dim text-sm">{{ lead.website }}</div>
+          {% endif %}
+        </td>
+        <td>
+          <div>{{ lead.first_name or '' }} {{ lead.last_name or '' }}</div>
+          {% if lead.email %}
+          <div class="text-dim text-sm">{{ lead.email }}</div>
+          {% endif %}
+        </td>
+        <td>
+          <span class="text-dim">{{ lead.city or '' }}{% if lead.city and lead.state %}, {% endif %}{{ lead.state or '' }}</span>
+        </td>
+        <td>
+          {% if lead.tier == 'hot' %}
+            <span class="badge badge-hot">Hot</span>
+          {% elif lead.tier == 'warm' %}
+            <span class="badge badge-warm">Warm</span>
+          {% elif lead.tier == 'cold' %}
+            <span class="badge badge-cold">Cold</span>
+          {% else %}
+            <span class="badge badge-pending">{{ lead.tier or '—' }}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% set st = lead.status or 'pending' %}
+          <span class="badge badge-{{ st }}">{{ st }}</span>
+        </td>
+        <td>
+          <div class="flex gap-2">
+            <a href="/leads/{{ lead.slug }}" class="btn btn-sm btn-ghost">View</a>
+            {% if lead.status != 'completed' and lead.status != 'processing' %}
+            <button class="btn btn-sm btn-primary" onclick="runPipeline('{{ lead.slug }}')">Run Pipeline</button>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7">
+          <div class="empty-state">
+            <p>No leads found. Import leads from the Settings page.</p>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div class="pagination">
+  {% if page > 1 %}
+    <a href="{{ paginationUrl(page - 1) }}" onclick="goToPage({{ page - 1 }}); return false;">&laquo; Prev</a>
+  {% endif %}
+
+  {% for p in range(1, total_pages + 1) %}
+    {% if p == page %}
+      <span class="active">{{ p }}</span>
+    {% elif p <= 3 or p > total_pages - 3 or (p >= page - 2 and p <= page + 2) %}
+      <a href="#" onclick="goToPage({{ p }}); return false;">{{ p }}</a>
+    {% elif p == 4 or p == total_pages - 3 %}
+      <span class="text-dim">...</span>
+    {% endif %}
+  {% endfor %}
+
+  {% if page < total_pages %}
+    <a href="#" onclick="goToPage({{ page + 1 }}); return false;">Next &raquo;</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  /* ── Filter / Sort / Pagination helpers ── */
+  function buildUrl(overrides) {
+    const params = new URLSearchParams();
+    const tier = overrides.tier !== undefined ? overrides.tier : '{{ tier }}';
+    const status = overrides.status !== undefined ? overrides.status : '{{ status }}';
+    const search = overrides.search !== undefined ? overrides.search : '{{ search }}';
+    const sort = overrides.sort !== undefined ? overrides.sort : '{{ sort }}';
+    const dir = overrides.dir !== undefined ? overrides.dir : '{{ dir }}';
+    const page = overrides.page !== undefined ? overrides.page : {{ page }};
+
+    if (tier) params.set('tier', tier);
+    if (status) params.set('status', status);
+    if (search) params.set('search', search);
+    if (sort) params.set('sort', sort);
+    if (dir) params.set('dir', dir);
+    if (page > 1) params.set('page', page);
+
+    return '/leads?' + params.toString();
+  }
+
+  function applyFilters() {
+    const tier = document.getElementById('filter-tier').value;
+    const status = document.getElementById('filter-status').value;
+    const search = document.getElementById('search-input').value.trim();
+    window.location.href = buildUrl({ tier, status, search, page: 1 });
+  }
+
+  function sortBy(col) {
+    let newDir = 'desc';
+    if ('{{ sort }}' === col && '{{ dir }}' === 'desc') {
+      newDir = 'asc';
+    }
+    window.location.href = buildUrl({ sort: col, dir: newDir, page: 1 });
+  }
+
+  function goToPage(p) {
+    window.location.href = buildUrl({ page: p });
+  }
+
+  /* ── Run pipeline for a specific lead ── */
+  function runPipeline(slug) {
+    if (!confirm('Run pipeline for ' + slug + '?')) return;
+    fetch('/api/pipeline/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: slug }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        showToast('Pipeline started for ' + slug, 'success');
+        setTimeout(() => window.location.href = '/pipeline', 1000);
+      } else {
+        showToast(data.error || 'Failed to start pipeline', 'error');
+      }
+    })
+    .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,29 @@
+{
+  "keywords": [
+    "automation",
+    "ai agent",
+    "n8n",
+    "gpt",
+    "workflow",
+    "api integration",
+    "voice ai",
+    "ai consultant",
+    "app developer"
+  ],
+  "days": 1,
+  "workers": 3,
+  "filters": {
+    "verified_payment": false,
+    "min_client_spent": 0,
+    "min_fixed_budget": 500,
+    "min_hourly_rate": 25,
+    "max_proposals": 20,
+    "experience_levels": ["intermediate", "expert"]
+  },
+  "qualification": {
+    "model": "claude-sonnet-4-5-20250929",
+    "min_score": 7,
+    "skills_profile": "AI/automation, n8n workflows, voice AI agents, API integrations, Claude/GPT apps, workflow design"
+  },
+  "seen_jobs_path": ".tmp/upwork_seen_jobs.json"
+}

@@ -1,0 +1,14 @@
+Subject: Built something for {casual_city_name} service businesses
+
+Hey {casual_first_name},
+
+{icebreaker}
+
+We built an AI system that answers calls, books jobs, and follows up with leads automatically — specifically for service businesses like {casual_company_name}.
+
+It handles the stuff your team probably doesn't have time for: after-hours calls, quote follow-ups, review requests. Runs 24/7 without adding headcount.
+
+Would you want to see a quick demo of how it works? I can show you one customized for your type of business.
+
+Ted
+TedCA

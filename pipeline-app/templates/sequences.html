@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block title %}Sequences — TedCA Pipeline{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Email Sequences</h2>
+    <div class="subtitle">Manage outbound email cadences</div>
+  </div>
+  <div class="flex gap-2 items-center">
+    <span class="text-dim text-sm">Today: {{ today }}</span>
+  </div>
+</div>
+
+<!-- ==================== TODAY'S SENDS ==================== -->
+<div class="card mb-6">
+  <div class="card-header">
+    <div class="card-title">Today's Sends ({{ due_sequences|length }})</div>
+  </div>
+  {% if due_sequences %}
+  <div style="max-height: 400px; overflow-y: auto;">
+    {% for seq in due_sequences %}
+    <div class="activity-item" id="seq-today-{{ seq.id }}">
+      <div style="min-width: 0; flex: 1;">
+        <div class="flex items-center gap-2">
+          <span style="font-weight: 600;">{{ seq._lead.company_name if seq._lead else seq.slug or seq.id[:8] }}</span>
+          {% if seq._lead and seq._lead.tier %}
+            {% if seq._lead.tier == 'hot' %}
+              <span class="badge badge-hot">Hot</span>
+            {% elif seq._lead.tier == 'warm' %}
+              <span class="badge badge-warm">Warm</span>
+            {% else %}
+              <span class="badge badge-cold">Cold</span>
+            {% endif %}
+          {% endif %}
+        </div>
+        <div class="text-dim text-sm" style="margin-top: 2px;">
+          Touch {{ seq.current_touchpoint or 1 }}
+          {% if seq._lead %} — {{ seq._lead.first_name or '' }} {{ seq._lead.last_name or '' }}{% endif %}
+          {% if seq._email %} — {{ seq._email.subject or '(no subject)' }}{% endif %}
+        </div>
+      </div>
+      <div class="flex gap-2" style="flex-shrink: 0;">
+        {% if seq._email %}
+        <button class="btn btn-sm btn-ghost" onclick="previewEmail('{{ seq._email.id }}')">Preview</button>
+        <button class="btn btn-sm btn-primary" onclick="sendEmail('{{ seq._email.id }}', this)">Send</button>
+        {% else %}
+        <span class="text-dim text-sm">No draft</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p>No emails due today.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ==================== UPCOMING CALENDAR ==================== -->
+<div class="card mb-6">
+  <div class="card-header">
+    <div class="card-title">Upcoming (Next 14 Days)</div>
+  </div>
+  {% if upcoming %}
+  <div style="max-height: 400px; overflow-y: auto;">
+    {% for date_str in upcoming|sort %}
+    <div style="padding: 10px 0; border-bottom: 1px solid var(--card-border);">
+      <div class="flex items-center gap-2" style="margin-bottom: 6px;">
+        <span style="font-weight: 600; font-size: 13px; color: var(--accent);">{{ date_str }}</span>
+        <span class="badge badge-pending" style="font-size: 10px;">{{ upcoming[date_str]|length }}</span>
+      </div>
+      {% for seq in upcoming[date_str] %}
+      <div class="flex items-center gap-2" style="padding: 4px 0 4px 16px; font-size: 13px;">
+        <span class="text-dim" style="min-width: 60px;">Touch {{ seq.current_touchpoint or '?' }}</span>
+        <span>{{ seq.slug or seq.id[:8] }}</span>
+        <span class="badge badge-{{ seq.status or 'active' }}" style="margin-left: auto;">{{ seq.status or 'active' }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p>No upcoming sequences scheduled.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ==================== ALL SEQUENCES TABLE ==================== -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">All Sequences ({{ all_sequences|length }})</div>
+  </div>
+  {% if all_sequences %}
+  <div class="table-container" style="border: none;">
+    <table>
+      <thead>
+        <tr>
+          <th>Company / Slug</th>
+          <th>Status</th>
+          <th>Current Touch</th>
+          <th>Next Send</th>
+          <th>Created</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for seq in all_sequences %}
+        <tr id="seq-row-{{ seq.id }}">
+          <td>
+            <div style="font-weight: 600;">
+              {% if seq.slug %}
+              <a href="/leads/{{ seq.slug }}">{{ seq.slug }}</a>
+              {% else %}
+              {{ seq.id[:12] }}
+              {% endif %}
+            </div>
+          </td>
+          <td>
+            {% set st = seq.status or 'active' %}
+            <span class="badge badge-{{ st }}">{{ st }}</span>
+          </td>
+          <td>
+            <span class="text-mono">{{ seq.current_touchpoint or 1 }} / 4</span>
+          </td>
+          <td>
+            {% if seq.next_send_date %}
+              <span class="text-sm {% if seq.next_send_date == today %}text-dim" style="color: var(--accent); font-weight: 600;{% else %}text-dim{% endif %}">
+                {{ seq.next_send_date }}
+              </span>
+            {% else %}
+              <span class="text-dim">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="text-dim text-sm">{{ seq.created_at[:10] if seq.created_at else '—' }}</span>
+          </td>
+          <td>
+            <div class="flex gap-2">
+              {% if seq.status == 'active' %}
+              <button class="btn btn-sm btn-ghost" onclick="pauseSequence('{{ seq.id }}', this)">Pause</button>
+              {% elif seq.status == 'paused' %}
+              <button class="btn btn-sm btn-primary" onclick="resumeSequence('{{ seq.id }}', this)">Resume</button>
+              {% endif %}
+              {% if seq.status == 'active' or seq.status == 'paused' %}
+              <button class="btn btn-sm btn-danger" onclick="skipTouch('{{ seq.id }}', this)">Skip Touch</button>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p>No sequences created yet. Sequences are started when the pipeline completes for a lead.</p>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  /* ── Preview email in modal ── */
+  function previewEmail(emailId) {
+    fetch('/api/emails/' + emailId + '/preview')
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) {
+          showToast(data.error, 'error');
+          return;
+        }
+        const modal = document.getElementById('modal-content');
+        modal.innerHTML =
+          '<div class="modal-title">' +
+            '<span>Touch ' + data.touchpoint + ': ' + escapeHtml(data.subject || '(no subject)') + '</span>' +
+            '<button class="modal-close" onclick="closeModal()">&times;</button>' +
+          '</div>' +
+          '<div style="margin-bottom: 8px;"><span class="badge badge-' + (data.status || 'draft') + '">' + (data.status || 'draft') + '</span></div>' +
+          '<div style="background: #fff; border-radius: 8px; padding: 20px; max-height: 400px; overflow-y: auto;">' +
+            (data.html || '<p style="color: #999;">No HTML content</p>') +
+          '</div>';
+        document.getElementById('modal-overlay').classList.add('active');
+      })
+      .catch(err => showToast('Preview failed: ' + err.message, 'error'));
+  }
+
+  /* ── Send email ── */
+  function sendEmail(emailId, btn) {
+    if (!confirm('Send this email now?')) return;
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+
+    fetch('/api/emails/' + emailId + '/send', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) {
+          showToast('Email sent successfully', 'success');
+          if (btn) { btn.textContent = 'Sent'; btn.className = 'btn btn-sm btn-ghost'; }
+          setTimeout(() => location.reload(), 1500);
+        } else {
+          showToast(data.error || 'Send failed', 'error');
+          if (btn) { btn.disabled = false; btn.textContent = 'Send'; }
+        }
+      })
+      .catch(err => {
+        showToast('Error: ' + err.message, 'error');
+        if (btn) { btn.disabled = false; btn.textContent = 'Send'; }
+      });
+  }
+
+  /* ── Pause sequence ── */
+  function pauseSequence(seqId, btn) {
+    if (btn) { btn.disabled = true; }
+    fetch('/api/sequences/' + seqId + '/pause', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) {
+          showToast('Sequence paused', 'info');
+          setTimeout(() => location.reload(), 800);
+        } else {
+          showToast('Failed to pause', 'error');
+          if (btn) btn.disabled = false;
+        }
+      })
+      .catch(err => {
+        showToast('Error: ' + err.message, 'error');
+        if (btn) btn.disabled = false;
+      });
+  }
+
+  /* ── Resume sequence ── */
+  function resumeSequence(seqId, btn) {
+    if (btn) { btn.disabled = true; }
+    fetch('/api/sequences/' + seqId + '/resume', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) {
+          showToast('Sequence resumed', 'success');
+          setTimeout(() => location.reload(), 800);
+        } else {
+          showToast('Failed to resume', 'error');
+          if (btn) btn.disabled = false;
+        }
+      })
+      .catch(err => {
+        showToast('Error: ' + err.message, 'error');
+        if (btn) btn.disabled = false;
+      });
+  }
+
+  /* ── Skip current touch ── */
+  function skipTouch(seqId, btn) {
+    if (!confirm('Skip the current touchpoint for this sequence?')) return;
+    // We use the skip email endpoint if there's a matching email, or just advance the sequence
+    // For now, advance by calling pause + resume at next touch (handled server-side if endpoint exists)
+    showToast('Skip touch not yet implemented — use the Emails tab on the lead detail page to skip individual emails.', 'info');
+  }
+
+  /* ── Helpers ── */
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function closeModal() {
+    document.getElementById('modal-overlay').classList.remove('active');
+  }
+
+  document.getElementById('modal-overlay').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+</script>
+{% endblock %}

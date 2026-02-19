@@ -1,0 +1,64 @@
+# Secrets & credentials
+.env
+credentials.json
+token.json
+gmail_credentials.json
+gmail_token.json
+
+# Temp & generated files
+.tmp/
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store
+
+# IDE / agent configs
+.claude/
+.cursor/
+.agent/
+.agents/
+.factory/
+.goose/
+.kilocode/
+.kiro/
+.neovate/
+.roo/
+.trae/
+.windsurf/
+.mcp.json
+
+# Unrelated project folders
+Building Website/
+Green-Grow-Marketing-/
+ai-receptionist-service/
+ai-trading-bot/
+chiropractor-website/
+dental-life-website/
+drive-download-*/
+email-monitor/
+greengrow-strategy/
+greengrowcct/
+greengrowdigital-cct/
+hcl-redesign/
+hvac-crm/
+lead-gen-system/
+mixsy-website/
+n8n-mcp/
+n8n-skills/
+new_project/
+skills/
+test-results/
+tiktok-avatar-pipeline/
+tiktok-recreation/
+viva-la-pizza/
+yt-growth-chart/
+
+# Large binary files
+*.PNG
+*.png
+*.jpg
+*.mp4
+*.json.bak
+hf_*.png
+n8n_*.json
+package.json

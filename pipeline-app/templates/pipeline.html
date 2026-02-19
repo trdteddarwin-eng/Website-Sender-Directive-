@@ -1,0 +1,530 @@
+{% extends "base.html" %}
+{% block title %}Pipeline — TedCA Pipeline{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Pipeline</h2>
+    <div class="subtitle">Live agent monitor</div>
+  </div>
+  <div class="flex gap-2">
+    {% if next_lead %}
+    <button class="btn btn-primary" id="btn-run-next" onclick="runNext()">
+      Run Next Lead
+      <span class="text-dim text-sm" style="margin-left: 4px;">({{ next_lead.company_name or next_lead.slug }})</span>
+    </button>
+    {% else %}
+    <button class="btn btn-primary" disabled>No Leads in Queue</button>
+    {% endif %}
+    <button class="btn btn-secondary" onclick="runBatch()">Run Batch (5)</button>
+  </div>
+</div>
+
+<!-- Active Run Banner -->
+<div id="active-run-banner" class="card mb-4" style="{% if not active_run %}display:none;{% endif %} border-left: 3px solid var(--blue);">
+  <div class="flex items-center gap-3">
+    <div class="spinner"></div>
+    <div>
+      <div style="font-weight: 600;" id="active-run-lead">
+        {% if active_run %}Processing: {{ active_run.slug or 'unknown' }}{% endif %}
+      </div>
+      <div class="text-dim text-sm" id="active-run-status">
+        {% if active_run %}Step: {{ active_run.current_step or 'starting' }}{% endif %}
+      </div>
+    </div>
+    <div class="ml-auto">
+      <span class="agent-timer text-mono" id="active-run-timer">00:00</span>
+    </div>
+  </div>
+</div>
+
+<!-- Agent Cards -->
+<div class="agents-grid">
+  <!-- Researcher -->
+  <div class="agent-card waiting" id="agent-researcher">
+    <div class="agent-header">
+      <div class="agent-name" style="color: var(--purple);">Researcher</div>
+      <span class="badge badge-pending" id="agent-researcher-badge">Idle</span>
+    </div>
+    <div class="agent-task" id="agent-researcher-task">Waiting for lead...</div>
+    <div class="agent-timer" id="agent-researcher-timer">00:00</div>
+    <div class="completed-list">
+      <div class="cl-label">Completed</div>
+      <div id="agent-researcher-completed">—</div>
+    </div>
+  </div>
+
+  <!-- Designer -->
+  <div class="agent-card waiting" id="agent-designer">
+    <div class="agent-header">
+      <div class="agent-name" style="color: var(--pink);">Designer</div>
+      <span class="badge badge-pending" id="agent-designer-badge">Idle</span>
+    </div>
+    <div class="agent-task" id="agent-designer-task">Waiting for research...</div>
+    <div class="agent-timer" id="agent-designer-timer">00:00</div>
+    <div class="completed-list">
+      <div class="cl-label">Completed</div>
+      <div id="agent-designer-completed">—</div>
+    </div>
+  </div>
+
+  <!-- Judge -->
+  <div class="agent-card waiting" id="agent-judge">
+    <div class="agent-header">
+      <div class="agent-name" style="color: var(--orange);">Judge</div>
+      <span class="badge badge-pending" id="agent-judge-badge">Idle</span>
+    </div>
+    <div class="agent-task" id="agent-judge-task">Waiting for site...</div>
+    <div class="agent-timer" id="agent-judge-timer">00:00</div>
+    <div class="completed-list">
+      <div class="cl-label">Completed</div>
+      <div id="agent-judge-completed">—</div>
+    </div>
+  </div>
+
+  <!-- Ops -->
+  <div class="agent-card waiting" id="agent-ops">
+    <div class="agent-header">
+      <div class="agent-name" style="color: var(--green);">Ops</div>
+      <span class="badge badge-pending" id="agent-ops-badge">Idle</span>
+    </div>
+    <div class="agent-task" id="agent-ops-task">Waiting for approval...</div>
+    <div class="agent-timer" id="agent-ops-timer">00:00</div>
+    <div class="completed-list">
+      <div class="cl-label">Completed</div>
+      <div id="agent-ops-completed">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom grid: Activity Log + Preview -->
+<div class="grid-2 mb-6">
+  <!-- Activity Log -->
+  <div class="log-panel">
+    <div class="card-header">
+      <div class="card-title">Activity Log</div>
+      <button class="btn btn-sm btn-ghost" onclick="clearLog()">Clear</button>
+    </div>
+    <div class="log-scroll" id="log-scroll">
+      <div class="log-entry">
+        <span class="log-time">--:--</span>
+        <span class="log-agent system">system</span>
+        <span class="log-msg">Pipeline monitor ready. Listening for events...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview Panel -->
+  <div class="preview-panel">
+    <div class="card-header">
+      <div class="card-title">Spec Site Preview</div>
+    </div>
+    <div id="preview-container">
+      <div class="preview-placeholder" id="preview-placeholder">
+        No spec site to preview yet
+      </div>
+      <iframe id="preview-iframe" class="preview-iframe" style="display:none; height: 400px;"></iframe>
+    </div>
+  </div>
+</div>
+
+<!-- Queue -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Lead Queue (Next 5 Hot Leads)</div>
+  </div>
+  {% if queue_leads %}
+  <div class="table-container" style="border: none;">
+    <table>
+      <thead>
+        <tr>
+          <th>Score</th>
+          <th>Company</th>
+          <th>Contact</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lead in queue_leads %}
+        <tr>
+          <td><span class="text-mono" style="font-weight: 700;">{{ lead.lead_score or 0 }}</span></td>
+          <td style="font-weight: 600;">{{ lead.company_name or lead.slug }}</td>
+          <td class="text-dim">{{ lead.first_name or '' }} {{ lead.last_name or '' }}</td>
+          <td><span class="badge badge-{{ lead.status or 'pending' }}">{{ lead.status or 'pending' }}</span></td>
+          <td>
+            <button class="btn btn-sm btn-primary" onclick="runSpecific('{{ lead.slug }}')">Run</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p>No pending hot leads in the queue.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Recent Runs -->
+{% if recent_runs %}
+<div class="card mt-4">
+  <div class="card-header">
+    <div class="card-title">Recent Pipeline Runs</div>
+  </div>
+  <div class="table-container" style="border: none;">
+    <table>
+      <thead>
+        <tr>
+          <th>Slug</th>
+          <th>Status</th>
+          <th>Started</th>
+          <th>Duration</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in recent_runs %}
+        <tr>
+          <td><a href="/leads/{{ run.slug or '' }}">{{ run.slug or run.id[:8] }}</a></td>
+          <td><span class="badge badge-{{ run.status or 'pending' }}">{{ run.status or 'unknown' }}</span></td>
+          <td class="text-dim text-sm">{{ run.started_at[:16] if run.started_at else '—' }}</td>
+          <td class="text-mono text-sm">
+            {% if run.started_at and run.completed_at %}
+              {{ run.duration_display or '—' }}
+            {% elif run.status == 'running' %}
+              <span class="dot-pulse"><span></span><span></span><span></span></span>
+            {% else %}
+              —
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  /* ── State ── */
+  let agentTimers = {};
+  let runStartTime = null;
+  let timerInterval = null;
+
+  /* ── SSE Connection ── */
+  const evtSource = new EventSource('/api/pipeline/stream');
+
+  evtSource.onerror = function() {
+    addLog('system', 'SSE connection lost. Reconnecting...');
+  };
+
+  /* Listen for named SSE events from pipeline_runner */
+  evtSource.addEventListener('pipeline_started', function(e) {
+    const data = JSON.parse(e.data);
+    const slug = data.slug || '';
+    startRun(slug, data);
+    addLog('system', 'Pipeline started for ' + (data.lead ? data.lead.company_name : slug));
+  });
+
+  evtSource.addEventListener('agent_update', function(e) {
+    const data = JSON.parse(e.data);
+    const agent = data.agent || '';
+    const status = data.status || '';
+    const task = data.task || '';
+    const slug = data.slug || '';
+
+    if (status === 'working') {
+      setAgentState(agent, 'working', task || 'Working...');
+      if (!agentTimers[agent]) startAgentTimer(agent);
+      document.getElementById('active-run-status').textContent = 'Step: ' + agent + ' — ' + task;
+    } else if (status === 'done') {
+      setAgentState(agent, 'done', 'Complete');
+      stopAgentTimer(agent);
+    }
+
+    // Update completed tasks list
+    if (data.completed_tasks && data.completed_tasks.length > 0) {
+      const el = document.getElementById('agent-' + agent + '-completed');
+      if (el) {
+        el.innerHTML = '';
+        data.completed_tasks.forEach(function(t) {
+          const item = document.createElement('div');
+          item.className = 'completed-item';
+          item.textContent = t;
+          el.appendChild(item);
+        });
+      }
+    }
+  });
+
+  evtSource.addEventListener('pipeline_log', function(e) {
+    const data = JSON.parse(e.data);
+    addLog(data.agent || 'system', data.message || '');
+  });
+
+  evtSource.addEventListener('pipeline_completed', function(e) {
+    const data = JSON.parse(e.data);
+    endRun(data.slug || '', data);
+    showPreview(data.slug || '');
+    addLog('system', 'Pipeline completed!');
+    showToast('Pipeline completed!', 'success');
+  });
+
+  evtSource.addEventListener('pipeline_failed', function(e) {
+    const data = JSON.parse(e.data);
+    endRun(data.slug || '', data, true);
+    addLog('system', 'Pipeline failed: ' + (data.error || 'Unknown'));
+    showToast('Pipeline failed: ' + (data.error || ''), 'error');
+  });
+
+  evtSource.addEventListener('email_sent', function(e) {
+    const data = JSON.parse(e.data);
+    addLog('ops', 'Email sent for ' + (data.slug || ''));
+  });
+
+  evtSource.addEventListener('reply_detected', function(e) {
+    const data = JSON.parse(e.data);
+    showToast('Reply detected: ' + data.sentiment + ' from ' + data.from, 'success');
+  });
+
+  /* ── Agent card helpers ── */
+  function setAgentState(agent, state, task) {
+    const card = document.getElementById('agent-' + agent);
+    if (!card) return;
+    card.className = 'agent-card ' + state;
+
+    const badge = document.getElementById('agent-' + agent + '-badge');
+    if (badge) {
+      badge.className = 'badge badge-' + (state === 'working' ? 'running' : (state === 'done' ? 'completed' : (state === 'error' ? 'failed' : 'pending')));
+      badge.textContent = state === 'working' ? 'Running' : (state === 'done' ? 'Done' : (state === 'error' ? 'Error' : 'Idle'));
+    }
+    updateAgentTask(agent, task);
+  }
+
+  function updateAgentTask(agent, task) {
+    const el = document.getElementById('agent-' + agent + '-task');
+    if (el) el.textContent = task;
+  }
+
+  function startAgentTimer(agent) {
+    agentTimers[agent] = Date.now();
+  }
+
+  function stopAgentTimer(agent) {
+    delete agentTimers[agent];
+  }
+
+  function addAgentCompleted(agent, msg) {
+    const el = document.getElementById('agent-' + agent + '-completed');
+    if (!el) return;
+    if (el.textContent === '\u2014') el.innerHTML = '';
+    const item = document.createElement('div');
+    item.className = 'completed-item';
+    item.textContent = msg;
+    el.appendChild(item);
+  }
+
+  /* ── Run lifecycle ── */
+  function startRun(slug, data) {
+    runStartTime = Date.now();
+    const banner = document.getElementById('active-run-banner');
+    banner.style.display = '';
+    document.getElementById('active-run-lead').textContent = 'Processing: ' + slug;
+    document.getElementById('active-run-status').textContent = 'Step: starting';
+
+    // Reset agents
+    ['researcher', 'designer', 'judge', 'ops'].forEach(a => {
+      setAgentState(a, 'waiting', 'Waiting...');
+      document.getElementById('agent-' + a + '-timer').textContent = '00:00';
+      document.getElementById('agent-' + a + '-completed').innerHTML = '\u2014';
+    });
+
+    // Start global timer
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(updateTimers, 1000);
+  }
+
+  function endRun(slug, data, isError) {
+    if (timerInterval) clearInterval(timerInterval);
+    const banner = document.getElementById('active-run-banner');
+    if (isError) {
+      banner.style.borderLeftColor = 'var(--red)';
+      document.getElementById('active-run-status').textContent = 'Failed: ' + (data.message || 'Unknown error');
+    } else {
+      banner.style.borderLeftColor = 'var(--green)';
+      document.getElementById('active-run-status').textContent = 'Completed';
+    }
+    // Stop spinner
+    const spinner = banner.querySelector('.spinner');
+    if (spinner) spinner.style.display = 'none';
+  }
+
+  function updateTimers() {
+    // Global run timer
+    if (runStartTime) {
+      document.getElementById('active-run-timer').textContent = formatDuration(Date.now() - runStartTime);
+    }
+    // Agent timers
+    Object.keys(agentTimers).forEach(agent => {
+      const el = document.getElementById('agent-' + agent + '-timer');
+      if (el) el.textContent = formatDuration(Date.now() - agentTimers[agent]);
+    });
+  }
+
+  function formatDuration(ms) {
+    const secs = Math.floor(ms / 1000);
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+
+  /* ── Log panel ── */
+  function addLog(agent, msg) {
+    const scroll = document.getElementById('log-scroll');
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+
+    const now = new Date();
+    const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0') + ':' + String(now.getSeconds()).padStart(2, '0');
+
+    entry.innerHTML =
+      '<span class="log-time">' + timeStr + '</span>' +
+      '<span class="log-agent ' + (agent || 'system') + '">' + (agent || 'system') + '</span>' +
+      '<span class="log-msg">' + escapeHtml(msg) + '</span>';
+
+    scroll.appendChild(entry);
+    scroll.scrollTop = scroll.scrollHeight;
+  }
+
+  function clearLog() {
+    const scroll = document.getElementById('log-scroll');
+    scroll.innerHTML = '';
+    addLog('system', 'Log cleared.');
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  /* ── Preview ── */
+  function showPreview(slug) {
+    const iframe = document.getElementById('preview-iframe');
+    const placeholder = document.getElementById('preview-placeholder');
+    iframe.src = '/api/preview/' + slug;
+    iframe.style.display = '';
+    placeholder.style.display = 'none';
+  }
+
+  /* ── Actions ── */
+  function runNext() {
+    const btn = document.getElementById('btn-run-next');
+    if (btn) { btn.disabled = true; btn.textContent = 'Starting...'; }
+
+    fetch('/api/pipeline/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        showToast('Pipeline started for ' + data.slug, 'success');
+      } else {
+        showToast(data.error || 'Failed to start', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = 'Run Next Lead'; }
+      }
+    })
+    .catch(err => {
+      showToast('Error: ' + err.message, 'error');
+      if (btn) { btn.disabled = false; btn.textContent = 'Run Next Lead'; }
+    });
+  }
+
+  function runBatch() {
+    if (!confirm('Run pipeline for next 5 leads?')) return;
+
+    fetch('/api/pipeline/run-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ count: 5 }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        showToast('Batch started: ' + data.started + ' leads', 'success');
+      } else {
+        showToast(data.error || 'Batch failed', 'error');
+      }
+    })
+    .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  function runSpecific(slug) {
+    fetch('/api/pipeline/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: slug }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        showToast('Pipeline started for ' + slug, 'success');
+      } else {
+        showToast(data.error || 'Failed', 'error');
+      }
+    })
+    .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  /* ── Hydrate from active run on page load ── */
+  (function hydrateFromActiveRun() {
+    fetch('/api/pipeline/status')
+      .then(r => r.json())
+      .then(data => {
+        if (!data.active || !data.run) return;
+        const run = data.run;
+        const slug = run.slug || '';
+        const lead = data.lead;
+
+        startRun(slug, { lead: lead });
+
+        // Hydrate each agent
+        ['researcher', 'designer', 'judge', 'ops'].forEach(function(agent) {
+          const info = (run.agents || {})[agent];
+          if (!info) return;
+          if (info.status === 'done') {
+            setAgentState(agent, 'done', 'Complete');
+          } else if (info.status === 'working') {
+            setAgentState(agent, 'working', info.task || 'Working...');
+            startAgentTimer(agent);
+          }
+          if (info.completed_tasks && info.completed_tasks.length > 0) {
+            const el = document.getElementById('agent-' + agent + '-completed');
+            if (el) {
+              el.innerHTML = '';
+              info.completed_tasks.forEach(function(t) {
+                const item = document.createElement('div');
+                item.className = 'completed-item';
+                item.textContent = t;
+                el.appendChild(item);
+              });
+            }
+          }
+        });
+
+        // Hydrate log entries
+        if (run.log) {
+          run.log.forEach(function(entry) {
+            addLog(entry.agent || 'system', entry.message || '');
+          });
+        }
+      })
+      .catch(function() {});
+  })();
+</script>
+{% endblock %}

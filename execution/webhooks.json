@@ -1,0 +1,14 @@
+{
+  "webhooks": {
+    "create-proposal": {
+      "directive": "create_proposal_webhook",
+      "description": "Generate PandaDoc proposal and send follow-up email",
+      "tools": ["create_proposal", "send_email", "web_fetch"]
+    },
+    "vlp-review-responder": {
+      "directive": "vlp_review_responder",
+      "description": "Auto-respond to Google reviews for Viva la Pizza",
+      "tools": ["google_reviews_api", "read_sheet", "update_sheet", "send_email"]
+    }
+  }
+}
