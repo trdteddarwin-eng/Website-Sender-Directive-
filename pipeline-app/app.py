@@ -16,6 +16,7 @@ from blueprints.sequences import sequences_bp
 from blueprints.analytics import analytics_bp
 from blueprints.settings import settings_bp
 from blueprints.api import api_bp
+from blueprints.inbox import inbox_bp
 
 
 def create_app():
@@ -32,6 +33,7 @@ def create_app():
     app.register_blueprint(analytics_bp)
     app.register_blueprint(settings_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(inbox_bp)
 
     # Start background scheduler
     try:

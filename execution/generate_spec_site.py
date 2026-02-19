@@ -26,7 +26,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-MODEL = "anthropic/claude-sonnet-4"
+MODEL = "moonshotai/kimi-k2.5"
 
 PALETTES = [
     {"name": "Navy/Amber", "primary": "#0B1D3A", "accent": "#D4922A", "light": "#F5F0E8", "text_on_primary": "#FFFFFF"},

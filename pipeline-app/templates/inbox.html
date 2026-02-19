@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Inbox — TedCA{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Inbox</h2>
+    <p class="subtitle">Manage tedca.online email accounts</p>
+  </div>
+  <button class="btn btn-ghost btn-sm" onclick="refreshAll()">Refresh</button>
+</div>
+
+<!-- Account cards -->
+<div class="inbox-accounts">
+  {% for acc in accounts %}
+  <div class="inbox-account-card" data-email="{{ acc.email }}" onclick="selectAccount('{{ acc.email }}')">
+    <div class="inbox-account-avatar">{{ acc.display_name[0] }}</div>
+    <div class="inbox-account-info">
+      <div class="inbox-account-name">{{ acc.display_name }}</div>
+      <div class="inbox-account-email">{{ acc.email }}</div>
+    </div>
+    <span class="inbox-unread-badge" id="badge-{{ acc.email }}" {% if unread_counts.get(acc.email, 0) == 0 %}style="display:none"{% endif %}>
+      {{ unread_counts.get(acc.email, 0) }}
+    </span>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Main inbox area -->
+<div class="inbox-layout" id="inbox-layout" style="display:none">
+  <!-- Left: message list -->
+  <div class="inbox-list-panel">
+    <div class="inbox-list-toolbar">
+      <input type="text" class="search-input" id="inbox-search" placeholder="Search messages..." oninput="filterMessages()">
+    </div>
+    <div class="inbox-message-list" id="message-list">
+      <div class="empty-state"><p>Select an account above</p></div>
+    </div>
+    <div class="inbox-load-more" id="load-more-wrap" style="display:none">
+      <button class="btn btn-ghost btn-sm" onclick="loadMore()">Load More</button>
+    </div>
+  </div>
+
+  <!-- Right: reading pane -->
+  <div class="inbox-reading-pane" id="reading-pane">
+    <div class="inbox-reading-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48" style="opacity:0.3"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+      <p style="color:var(--text-dim);margin-top:12px">Select a message to read</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/inbox.js') }}"></script>
+{% endblock %}

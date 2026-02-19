@@ -47,8 +47,25 @@ def init_scheduler(app):
             except Exception as e:
                 print(f"[Scheduler] Follow-up check error: {e}")
 
+    @_scheduler.scheduled_job("interval", seconds=30, id="check_inbox")
+    def _check_inbox():
+        with app.app_context():
+            try:
+                from services.inbox_service import check_new_emails
+                new_emails = check_new_emails()
+                for em in new_emails:
+                    sse.publish("new_email", {
+                        "account": em.get("account"),
+                        "uid": em.get("uid"),
+                        "from_name": em.get("from_name"),
+                        "from_email": em.get("from_email"),
+                        "subject": em.get("subject"),
+                    })
+            except Exception as e:
+                print(f"[Scheduler] Inbox check error: {e}")
+
     _scheduler.start()
-    print("[Scheduler] Started — reply check every 5min, follow-up check every 1hr")
+    print("[Scheduler] Started — reply check every 5min, follow-up check every 1hr, inbox check every 30s")
 
 
 def stop_scheduler():

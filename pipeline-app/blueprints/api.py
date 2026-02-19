@@ -230,3 +230,102 @@ def preview_spec_site(slug):
         with open(html_path) as f:
             return f.read(), 200, {"Content-Type": "text/html"}
     return "Not found", 404
+
+
+# ── Inbox ─────────────────────────────────────────────
+
+@api_bp.route("/api/inbox/messages")
+def inbox_messages():
+    """Fetch email headers for a tedca.online account."""
+    from services.inbox_service import get_tedca_accounts, fetch_inbox
+    account_email = request.args.get("account", "")
+    offset = int(request.args.get("offset", 0))
+    limit = int(request.args.get("limit", 50))
+
+    accounts = get_tedca_accounts()
+    account = next((a for a in accounts if a["email"] == account_email), None)
+    if not account:
+        return jsonify({"error": "Account not found"}), 404
+
+    try:
+        messages = fetch_inbox(account, limit=limit, offset=offset)
+        return jsonify({"ok": True, "messages": messages, "account": account_email})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/api/inbox/message")
+def inbox_message():
+    """Fetch full email body by UID."""
+    from services.inbox_service import get_tedca_accounts, fetch_message_body
+    account_email = request.args.get("account", "")
+    uid = request.args.get("uid", "")
+
+    accounts = get_tedca_accounts()
+    account = next((a for a in accounts if a["email"] == account_email), None)
+    if not account:
+        return jsonify({"error": "Account not found"}), 404
+
+    try:
+        msg = fetch_message_body(account, uid)
+        if not msg:
+            return jsonify({"error": "Message not found"}), 404
+        return jsonify({"ok": True, "message": msg})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/api/inbox/mark", methods=["POST"])
+def inbox_mark():
+    """Mark email read or unread."""
+    from services.inbox_service import get_tedca_accounts, mark_message
+    data = request.get_json(silent=True) or {}
+    account_email = data.get("account", "")
+    uid = data.get("uid", "")
+    action = data.get("action", "")  # "read" or "unread"
+
+    if action not in ("read", "unread"):
+        return jsonify({"error": "action must be 'read' or 'unread'"}), 400
+
+    accounts = get_tedca_accounts()
+    account = next((a for a in accounts if a["email"] == account_email), None)
+    if not account:
+        return jsonify({"error": "Account not found"}), 404
+
+    try:
+        mark_message(account, uid, action)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/api/inbox/delete", methods=["POST"])
+def inbox_delete():
+    """Delete an email."""
+    from services.inbox_service import get_tedca_accounts, delete_message
+    data = request.get_json(silent=True) or {}
+    account_email = data.get("account", "")
+    uid = data.get("uid", "")
+
+    accounts = get_tedca_accounts()
+    account = next((a for a in accounts if a["email"] == account_email), None)
+    if not account:
+        return jsonify({"error": "Account not found"}), 404
+
+    try:
+        delete_message(account, uid)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/api/inbox/unread-total")
+def inbox_unread_total():
+    """Get unread counts for all tedca.online accounts."""
+    from services.inbox_service import get_unread_counts
+    try:
+        counts = get_unread_counts()
+        total = sum(counts.values())
+        return jsonify({"ok": True, "counts": counts, "total": total})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

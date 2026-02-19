@@ -43,6 +43,39 @@
       "daily_limit": 50,
       "provider": "zoho",
       "active": true
+    },
+    {
+      "email": "john@tedca.online",
+      "smtp_host": "mail.privateemail.com",
+      "smtp_port": 587,
+      "username": "john@tedca.online",
+      "password": "Charlested2003!",
+      "display_name": "John",
+      "daily_limit": 50,
+      "provider": "titan",
+      "active": true
+    },
+    {
+      "email": "patrick@tedca.online",
+      "smtp_host": "mail.privateemail.com",
+      "smtp_port": 587,
+      "username": "patrick@tedca.online",
+      "password": "Charlested2003!",
+      "display_name": "Patrick",
+      "daily_limit": 50,
+      "provider": "titan",
+      "active": true
+    },
+    {
+      "email": "ted@tedca.online",
+      "smtp_host": "mail.privateemail.com",
+      "smtp_port": 587,
+      "username": "ted@tedca.online",
+      "password": "Charlested2003!",
+      "display_name": "Ted",
+      "daily_limit": 50,
+      "provider": "titan",
+      "active": true
     }
   ]
 }

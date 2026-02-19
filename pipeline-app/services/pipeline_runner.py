@@ -228,13 +228,14 @@ class PipelineRunner:
         self._log("designer", "Design phase complete")
 
     def _run_judge(self):
-        """Step 3: Screenshot new site + basic quality check."""
+        """Step 3: Screenshot new site + programmatic check + Kimi K2.5 visual review."""
         self._update_agent("judge", "working", "Screenshotting new site")
         self._log("judge", "Starting evaluation")
         db.update_lead(self.slug, {"pipeline_status": "reviewing"})
 
         html_path = os.path.join(self.work_dir, "index.html")
         new_screenshot = os.path.join(self.work_dir, "new-site.png")
+        research_path = os.path.join(self.work_dir, "research.json")
 
         # Screenshot the spec site
         if not os.path.exists(new_screenshot):
@@ -246,17 +247,62 @@ class PipelineRunner:
                 self._log("judge", "New site screenshot captured")
             else:
                 self._log("judge", f"Screenshot failed: {err[:100]}")
-        self._update_agent("judge", "working", "Running quality checks", completed_task="Screenshot captured")
+        self._update_agent("judge", "working", "Running programmatic checks", completed_task="Screenshot captured")
 
-        # Basic programmatic quality check
-        score = self._quality_check(html_path)
+        # Programmatic quality check (structure)
+        struct_score = self._quality_check(html_path)
+        self._log("judge", f"Structure score: {struct_score}/100")
+        self._update_agent("judge", "working", "Running K2.5 visual review", completed_task=f"Structure: {struct_score}/100")
+
+        # Kimi K2.5 visual review (design quality)
+        visual_score = -1
+        visual_recommendation = "skipped"
+        visual_review_path = os.path.join(self.work_dir, "visual-review.json")
+        if os.path.exists(new_screenshot) and os.path.exists(research_path):
+            ok, out, err = self._run_script("judge_visual_review.py", [
+                "--screenshot", new_screenshot,
+                "--research", research_path,
+                "--output", visual_review_path,
+            ], timeout=120)
+            if ok and os.path.exists(visual_review_path):
+                try:
+                    with open(visual_review_path) as f:
+                        vr = json.load(f)
+                    visual_score = vr.get("visual_score", -1)
+                    visual_recommendation = vr.get("recommendation", "unknown")
+                    strengths = vr.get("strengths", [])
+                    issues = vr.get("issues", [])
+                    impression = vr.get("overall_impression", "")
+                    self._log("judge", f"Visual score: {visual_score}/100 — {visual_recommendation}")
+                    if impression:
+                        self._log("judge", f"K2.5: {impression}")
+                    for s in strengths[:2]:
+                        self._log("judge", f"  + {s}")
+                    for i in issues[:2]:
+                        self._log("judge", f"  - {i}")
+                except Exception as e:
+                    self._log("judge", f"Visual review parse error: {e}")
+            else:
+                self._log("judge", f"Visual review failed: {err[:100] if err else 'unknown error'}")
+        else:
+            self._log("judge", "Skipped visual review (missing screenshot or research)")
+
+        # Combined score: 40% structure + 60% visual (if available)
+        if visual_score >= 0:
+            combined_score = int(struct_score * 0.4 + visual_score * 0.6)
+        else:
+            combined_score = struct_score
+
         db.update_pipeline_run(self.run_id, {
-            "judge_score": score,
+            "judge_score": combined_score,
+            "judge_struct_score": struct_score,
+            "judge_visual_score": visual_score,
+            "judge_visual_recommendation": visual_recommendation,
             "new_screenshot_path": new_screenshot,
         })
-        self._log("judge", f"Quality score: {score}/100")
+        self._log("judge", f"Combined score: {combined_score}/100 (struct={struct_score}, visual={visual_score})")
 
-        self._update_agent("judge", "done", "", completed_task=f"Score: {score}/100")
+        self._update_agent("judge", "done", "", completed_task=f"Score: {combined_score}/100 ({visual_recommendation})")
         self._log("judge", "Evaluation complete")
 
     def _quality_check(self, html_path):
