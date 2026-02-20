@@ -36,6 +36,21 @@ def run_pipeline():
         return jsonify({"error": str(e)}), 500
 
 
+@api_bp.route("/api/pipeline/resume", methods=["POST"])
+def resume_pipeline():
+    """Resume a failed pipeline run from where it left off."""
+    data = request.get_json(silent=True) or {}
+    run_id = data.get("run_id")
+    if not run_id:
+        return jsonify({"error": "run_id is required"}), 400
+    try:
+        from services.pipeline_runner import resume_pipeline as _resume
+        run = _resume(run_id)
+        return jsonify({"ok": True, "run_id": run["id"], "slug": run.get("slug")})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @api_bp.route("/api/pipeline/run-batch", methods=["POST"])
 def run_batch():
     """Start pipeline for multiple leads."""
@@ -76,6 +91,85 @@ def pipeline_status():
 
 # ── Leads ──────────────────────────────────────────────
 
+@api_bp.route("/api/leads", methods=["POST"])
+def create_lead():
+    """Create a new lead."""
+    data = request.get_json(silent=True) or {}
+    company_name = data.get("company_name", "").strip()
+    if not company_name:
+        return jsonify({"error": "company_name is required"}), 400
+
+    import re
+    slug = re.sub(r"[^a-z0-9]+", "-", company_name.split(",")[0].strip().lower()).strip("-")
+    if not slug:
+        return jsonify({"error": "Invalid company name"}), 400
+
+    import uuid
+    lead_data = {
+        "id": str(uuid.uuid5(uuid.NAMESPACE_DNS, f"lead.{slug}")),
+        "slug": slug,
+        "company_name": company_name,
+        "first_name": data.get("first_name", ""),
+        "last_name": data.get("last_name", ""),
+        "email": data.get("email", ""),
+        "phone": data.get("phone", ""),
+        "website": data.get("website", ""),
+        "city": data.get("city", ""),
+        "state": data.get("state", ""),
+        "industry": data.get("industry", "HVAC"),
+        "lead_tier": data.get("lead_tier", "cold"),
+        "lead_score": int(data.get("lead_score", 0) or 0),
+        "pipeline_status": "pending",
+        "is_qualified": True,
+    }
+    try:
+        result = db.upsert_lead(lead_data)
+        return jsonify({"ok": True, "lead": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/api/leads/search")
+def search_leads():
+    """Quick lead search by name/slug for typeahead."""
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return jsonify({"ok": True, "leads": []})
+    leads, _ = db.get_leads(search=q, sort_by="lead_score", sort_dir="desc", page=1, per_page=10)
+    return jsonify({"ok": True, "leads": [
+        {"slug": l["slug"], "company_name": l.get("company_name", l["slug"]),
+         "status": l.get("pipeline_status", "pending"), "score": l.get("lead_score", 0)}
+        for l in leads
+    ]})
+
+
+@api_bp.route("/api/leads/<slug>", methods=["PUT"])
+def edit_lead(slug):
+    """Update lead fields."""
+    data = request.get_json(silent=True) or {}
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    # Only allow updating safe fields
+    allowed = {
+        "first_name", "last_name", "email", "phone", "company_name",
+        "website", "city", "state", "industry", "lead_tier", "lead_score",
+        "pipeline_status", "is_qualified", "disqualification_reason",
+        "company_description", "employee_count",
+    }
+    updates = {k: v for k, v in data.items() if k in allowed}
+    if not updates:
+        return jsonify({"error": "No valid fields to update"}), 400
+
+    try:
+        result = db.update_lead(slug, updates)
+        if not result:
+            return jsonify({"error": "Lead not found"}), 404
+        return jsonify({"ok": True, "lead": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @api_bp.route("/api/leads/import", methods=["POST"])
 def import_leads():
     """Import leads from a JSON file."""
@@ -110,28 +204,78 @@ def get_research(slug):
 
 # ── Emails / Sequences ────────────────────────────────
 
+@api_bp.route("/api/emails/compose", methods=["POST"])
+def compose_email():
+    """Create a standalone email draft (or save & send immediately)."""
+    data = request.get_json(silent=True) or {}
+    to_email = data.get("to_email", "").strip()
+    subject = data.get("subject", "").strip()
+    html_content = data.get("html_content", "").strip()
+    sender_account = data.get("sender_account", "").strip() or None
+
+    if not to_email or not subject:
+        return jsonify({"error": "Recipient and subject are required"}), 400
+
+    # Try to match to an existing lead by email
+    lead = db.get_lead_by_email(to_email)
+
+    email_data = {
+        "to_email": to_email,
+        "subject": subject,
+        "html_content": html_content or "",
+        "status": "draft",
+        "touchpoint": 1,
+        "sender_account": sender_account,
+        "sent_via": "smtp",
+    }
+    if lead:
+        email_data["lead_id"] = lead["id"]
+        email_data["slug"] = lead["slug"]
+
+    email = db.create_email(email_data)
+    return jsonify({"ok": True, "email": email})
+
+
 @api_bp.route("/api/emails/<email_id>/send", methods=["POST"])
 def send_email(email_id):
-    """Send a Gmail draft."""
+    """Send an email via SMTP."""
     email = db.get_email_by_id(email_id)
 
     if not email:
         return jsonify({"error": "Email not found"}), 404
 
-    draft_id = email.get("gmail_draft_id")
-    if not draft_id:
-        return jsonify({"error": "No Gmail draft ID — create draft first"}), 400
-
     try:
-        from services.email_service import send_draft
-        result = send_draft(draft_id)
+        from services.smtp_sender import send_email_smtp, get_next_sender
+
+        # Determine sender
+        sender = email.get("sender_account")
+        if not sender:
+            acc = get_next_sender()
+            sender = acc["email"] if acc else None
+        if not sender:
+            return jsonify({"error": "No sender account available"}), 400
+
+        # Determine recipient
+        lead = db.get_lead_by_id(email.get("lead_id"))
+        to_email = email.get("to_email") or (lead.get("email") if lead else "")
+        if not to_email:
+            return jsonify({"error": "No recipient email address"}), 400
+
+        result = send_email_smtp(
+            sender, to_email,
+            email.get("subject", ""),
+            email.get("html_content", ""),
+        )
+
+        if not result["success"]:
+            return jsonify({"error": result["error"]}), 500
 
         # Update email status
         db.update_email(email_id, {
             "status": "sent",
-            "gmail_message_id": result.get("message_id", ""),
-            "gmail_thread_id": result.get("thread_id", ""),
             "sent_at": datetime.utcnow().isoformat(),
+            "sender_account": sender,
+            "sent_via": "smtp",
         })
 
         # Advance sequence
@@ -155,7 +299,7 @@ def send_email(email_id):
         db.log_activity(
             lead_id=email.get("lead_id"), slug=email.get("slug"),
             event_type="email_sent", agent="user",
-            message=f"Touch {email.get('touchpoint', 1)} sent: {email.get('subject', '')}",
+            message=f"Touch {email.get('touchpoint', 1)} sent via {sender}: {email.get('subject', '')}",
         )
         sse.publish("email_sent", {"email_id": email_id, "slug": email.get("slug")})
 
@@ -185,6 +329,27 @@ def preview_email(email_id):
         "status": email.get("status", ""),
         "touchpoint": email.get("touchpoint", 1),
     })
+
+
+@api_bp.route("/api/emails/<email_id>", methods=["PUT"])
+def update_email(email_id):
+    """Update email subject and/or html_content."""
+    data = request.get_json(silent=True) or {}
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    allowed = {"subject", "html_content", "sender_account"}
+    updates = {k: v for k, v in data.items() if k in allowed}
+    if not updates:
+        return jsonify({"error": "No valid fields to update"}), 400
+
+    try:
+        result = db.update_email(email_id, updates)
+        if not result:
+            return jsonify({"error": "Email not found"}), 404
+        return jsonify({"ok": True, "email": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @api_bp.route("/api/sequences/<seq_id>/pause", methods=["POST"])
@@ -319,6 +484,53 @@ def inbox_delete():
         return jsonify({"error": str(e)}), 500
 
 
+@api_bp.route("/api/inbox/auto-replies")
+def inbox_auto_replies():
+    """List auto-reply records, optionally filtered by status."""
+    status = request.args.get("status")
+    limit = int(request.args.get("limit", 100))
+    try:
+        replies = db.get_auto_replies(status=status, limit=limit)
+        return jsonify({"ok": True, "auto_replies": replies})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/api/inbox/send-draft-reply", methods=["POST"])
+def send_draft_reply():
+    """Send a previously drafted auto-reply (supports edited body)."""
+    from services.auto_reply_service import send_draft_reply as _send_draft
+    data = request.get_json(silent=True) or {}
+    reply_id = data.get("id", "")
+    edited_body = data.get("body")  # Optional: if user edited the draft
+
+    if not reply_id:
+        return jsonify({"error": "Missing 'id'"}), 400
+
+    try:
+        result = _send_draft(reply_id, edited_body=edited_body)
+        if not result:
+            return jsonify({"error": "Draft not found or already sent"}), 404
+        sse.publish("auto_reply_sent", {
+            "id": reply_id,
+            "slug": result.get("slug", ""),
+            "to": result.get("incoming_from", ""),
+        })
+        return jsonify({"ok": True, "auto_reply": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/api/inbox/auto-reply-stats")
+def auto_reply_stats():
+    """Get auto-reply counts by status and sentiment."""
+    try:
+        stats = db.get_auto_reply_stats()
+        return jsonify({"ok": True, "stats": stats})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @api_bp.route("/api/inbox/unread-total")
 def inbox_unread_total():
     """Get unread counts for all tedca.online accounts."""
@@ -329,3 +541,95 @@ def inbox_unread_total():
         return jsonify({"ok": True, "counts": counts, "total": total})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ── Daily Queue ──────────────────────────────────────
+
+@api_bp.route("/api/queue/today")
+def queue_today():
+    """Get today's queue with lead + email details."""
+    try:
+        from services.daily_queue_service import get_todays_queue
+        items = get_todays_queue()
+        return jsonify({"ok": True, "queue": items})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/api/queue/generate", methods=["POST"])
+def queue_generate():
+    """Manual trigger: generate daily queue."""
+    data = request.get_json(silent=True) or {}
+    count = min(data.get("count", 6), 20)
+    try:
+        from services.daily_queue_service import generate_daily_queue
+        items = generate_daily_queue(count=count)
+        sse.publish("daily_queue_ready", {"count": len(items)})
+        return jsonify({"ok": True, "queued": len(items), "items": items})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/api/queue/send-all", methods=["POST"])
+def queue_send_all():
+    """Send all queued items in today's queue."""
+    try:
+        from services.daily_queue_service import approve_and_send_all
+        result = approve_and_send_all()
+        if result["sent"] > 0:
+            sse.publish("queue_sent", {"sent": result["sent"], "failed": result["failed"]})
+        return jsonify({"ok": True, **result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/api/queue/<queue_id>/send", methods=["POST"])
+def queue_send_one(queue_id):
+    """Send a single queued item."""
+    try:
+        from services.daily_queue_service import approve_and_send_one
+        result = approve_and_send_one(queue_id)
+        if result["success"]:
+            sse.publish("queue_item_sent", {"queue_id": queue_id})
+        return jsonify({"ok": result["success"], **result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/api/queue/<queue_id>/reassign", methods=["POST"])
+def queue_reassign(queue_id):
+    """Reassign sender for a queue item."""
+    data = request.get_json(silent=True) or {}
+    new_sender = data.get("sender_account", "")
+    if not new_sender:
+        return jsonify({"error": "sender_account required"}), 400
+    try:
+        from services.daily_queue_service import reassign_sender
+        item = reassign_sender(queue_id, new_sender)
+        return jsonify({"ok": True, "item": item})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/api/queue/<queue_id>/skip", methods=["POST"])
+def queue_skip(queue_id):
+    """Skip a queue item."""
+    try:
+        from services.daily_queue_service import skip_queue_item
+        item = skip_queue_item(queue_id)
+        return jsonify({"ok": True, "item": item})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Sender Accounts ──────────────────────────────────
+
+@api_bp.route("/api/senders")
+def list_senders():
+    """List available @tedca.online sender accounts."""
+    from services.smtp_sender import get_sender_accounts
+    accounts = get_sender_accounts()
+    return jsonify({
+        "ok": True,
+        "senders": [{"email": a["email"], "display_name": a.get("display_name", "")} for a in accounts],
+    })

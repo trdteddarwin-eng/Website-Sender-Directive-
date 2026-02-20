@@ -1,0 +1,434 @@
+{% extends "base.html" %}
+{% block title %}Drafts — TedCA Pipeline{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Drafts & Queue</h2>
+    <div class="subtitle">Review, edit, and send outreach emails</div>
+  </div>
+  <div class="flex gap-2">
+    <button class="btn btn-ghost" onclick="openCompose()">Compose</button>
+    <button class="btn btn-ghost" onclick="generateQueue()">Generate Queue (6)</button>
+    <button class="btn btn-primary" id="btn-send-all" onclick="sendAll()">Send All Queued</button>
+  </div>
+</div>
+
+<!-- Today's Queue -->
+<div class="card mb-6">
+  <div class="card-header">
+    <div class="card-title">Today's Queue</div>
+    <span class="badge badge-hot" id="queue-count">{{ queue|length }} queued</span>
+  </div>
+
+  {% if queue %}
+  <div style="display: grid; gap: 12px;">
+    {% for item in queue %}
+    <div class="queue-card" id="queue-{{ item.id }}" style="border: 1px solid var(--card-border); border-radius: 8px; padding: 16px; {% if item.status == 'sent' %}opacity: 0.6;{% endif %}">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-weight: 600; font-size: 15px;">{{ item.lead.company_name if item.lead else item.slug }}</span>
+          <span class="badge badge-{{ item.status or 'queued' }}">{{ item.status or 'queued' }}</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <select class="search-input sender-select" data-queue-id="{{ item.id }}" onchange="reassignSender(this)" style="font-size: 12px; padding: 4px 8px; min-width: 160px;">
+            {% for s in senders %}
+            <option value="{{ s.email }}" {{ 'selected' if s.email == item.sender_account }}>{{ s.display_name }} ({{ s.email }})</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 8px;">
+        <span class="text-dim text-sm">Subject: </span>
+        <span style="font-weight: 500;">{{ item.email.subject if item.email else '(no subject)' }}</span>
+      </div>
+
+      {% if item.email and item.email.html_content %}
+      <div style="background: #fff; border-radius: 6px; padding: 12px; max-height: 120px; overflow: hidden; margin-bottom: 12px; position: relative; font-size: 13px;">
+        {{ item.email.html_content|safe|truncate(300) }}
+        <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 40px; background: linear-gradient(transparent, #fff);"></div>
+      </div>
+      {% endif %}
+
+      {% if item.status == 'queued' %}
+      <div style="display: flex; gap: 8px; justify-content: flex-end;">
+        <button class="btn btn-sm btn-ghost" onclick="editQueueEmail('{{ item.email.id if item.email else '' }}')">Edit</button>
+        <button class="btn btn-sm btn-danger" onclick="skipQueueItem('{{ item.id }}')">Skip</button>
+        <button class="btn btn-sm btn-primary" onclick="sendQueueItem('{{ item.id }}')">Send</button>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p>No items in today's queue. Click "Generate Queue" to queue up hot leads.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- All Pending Drafts -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">All Pending Drafts</div>
+    <div class="flex gap-2">
+      <select id="filter-touch" class="search-input" style="font-size: 12px; padding: 4px 8px;" onchange="filterDrafts()">
+        <option value="">All Touches</option>
+        <option value="1">Touch 1</option>
+        <option value="2">Touch 2</option>
+        <option value="3">Touch 3</option>
+        <option value="4">Touch 4</option>
+      </select>
+      <select id="filter-sender" class="search-input" style="font-size: 12px; padding: 4px 8px;" onchange="filterDrafts()">
+        <option value="">All Senders</option>
+        {% for s in senders %}
+        <option value="{{ s.email }}">{{ s.display_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  {% if drafts %}
+  <div class="table-container">
+    <table id="drafts-table">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Touch</th>
+          <th>Subject</th>
+          <th>Sender</th>
+          <th>Created</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in drafts %}
+        <tr class="draft-row" data-touch="{{ d.touchpoint or '' }}" data-sender="{{ d.sender_account or '' }}">
+          <td>
+            {% if d.lead %}
+            <a href="/leads/{{ d.slug }}" style="font-weight: 500;">{{ d.lead.company_name }}</a>
+            {% elif d.slug %}
+            <a href="/leads/{{ d.slug }}" style="font-weight: 500;">{{ d.slug }}</a>
+            {% else %}
+            <span style="font-weight: 500;">{{ d.to_email or '(no recipient)' }}</span>
+            {% endif %}
+          </td>
+          <td><span class="text-mono" style="font-weight: 700;">{{ d.touchpoint or '—' }}</span></td>
+          <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ d.subject or '(no subject)' }}</td>
+          <td>
+            {% if d.sender_account %}
+            <span style="font-size: 12px; font-weight: 500;">{{ d.sender_account.split('@')[0] }}</span>
+            {% else %}
+            <span class="text-dim text-sm">—</span>
+            {% endif %}
+          </td>
+          <td><span class="text-dim text-sm">{{ d.created_at[:10] if d.created_at else '—' }}</span></td>
+          <td>
+            <div class="flex gap-2">
+              <button class="btn btn-sm btn-ghost" onclick="editQueueEmail('{{ d.id }}')">Edit</button>
+              <button class="btn btn-sm btn-primary" onclick="sendDraftEmail('{{ d.id }}')">Send</button>
+              <button class="btn btn-sm btn-danger" onclick="skipDraftEmail('{{ d.id }}')">Skip</button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p>No pending drafts. Run the pipeline to generate email drafts.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Compose Modal -->
+<div class="modal-overlay" id="compose-modal" onclick="if(event.target===this) this.classList.remove('active')">
+  <div class="modal" style="max-width: 700px;">
+    <div class="modal-title">
+      <span>Compose Email</span>
+      <button class="modal-close" onclick="document.getElementById('compose-modal').classList.remove('active')">&times;</button>
+    </div>
+    <div style="margin:12px 0;">
+      <label class="text-dim text-sm" style="display:block;margin-bottom:4px;">To (email)</label>
+      <input type="email" id="compose-to" class="search-input" style="width:100%;" placeholder="recipient@example.com">
+    </div>
+    <div style="margin:12px 0;">
+      <label class="text-dim text-sm" style="display:block;margin-bottom:4px;">Subject</label>
+      <input type="text" id="compose-subject" class="search-input" style="width:100%;" placeholder="Email subject">
+    </div>
+    <div style="margin:12px 0;">
+      <label class="text-dim text-sm" style="display:block;margin-bottom:4px;">Sender Account</label>
+      <select id="compose-sender" class="search-input" style="width:100%;">
+        {% for s in senders %}
+        <option value="{{ s.email }}">{{ s.display_name }} ({{ s.email }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="margin:12px 0;">
+      <label class="text-dim text-sm" style="display:block;margin-bottom:4px;">Body (HTML)</label>
+      <textarea id="compose-body" class="search-input" style="width:100%;min-height:300px;resize:vertical;font-family:var(--mono);font-size:12px;" placeholder="Write your email here..."></textarea>
+    </div>
+    <div class="flex gap-2" style="justify-content:flex-end;margin-top:8px;">
+      <button class="btn btn-ghost" onclick="saveCompose()">Save Draft</button>
+      <button class="btn btn-primary" onclick="saveAndSendCompose()">Save & Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- Email Edit Modal -->
+<div class="modal-overlay" id="edit-email-modal" onclick="if(event.target===this) this.classList.remove('active')">
+  <div class="modal" style="max-width: 700px;">
+    <div class="modal-title">
+      <span>Edit Email</span>
+      <button class="modal-close" onclick="document.getElementById('edit-email-modal').classList.remove('active')">&times;</button>
+    </div>
+    <div id="edit-email-content"></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function openCompose() {
+    document.getElementById('compose-to').value = '';
+    document.getElementById('compose-subject').value = '';
+    document.getElementById('compose-body').value = '';
+    document.getElementById('compose-modal').classList.add('active');
+  }
+
+  function _getComposeData() {
+    return {
+      to_email: document.getElementById('compose-to').value.trim(),
+      subject: document.getElementById('compose-subject').value.trim(),
+      html_content: document.getElementById('compose-body').value,
+      sender_account: document.getElementById('compose-sender').value,
+    };
+  }
+
+  function saveCompose() {
+    const data = _getComposeData();
+    if (!data.to_email || !data.subject) { showToast('Recipient and subject are required', 'error'); return; }
+    fetch('/api/emails/compose', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+    .then(r => r.json())
+    .then(res => {
+      if (res.ok) {
+        showToast('Draft saved', 'success');
+        document.getElementById('compose-modal').classList.remove('active');
+        setTimeout(() => location.reload(), 500);
+      } else showToast(res.error || 'Failed', 'error');
+    })
+    .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  function saveAndSendCompose() {
+    if (!confirm('Save and send this email?')) return;
+    const data = _getComposeData();
+    if (!data.to_email || !data.subject) { showToast('Recipient and subject are required', 'error'); return; }
+    fetch('/api/emails/compose', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+    .then(r => r.json())
+    .then(res => {
+      if (!res.ok) { showToast(res.error || 'Save failed', 'error'); return; }
+      return fetch('/api/emails/' + res.email.id + '/send', { method: 'POST' });
+    })
+    .then(r => r ? r.json() : null)
+    .then(res => {
+      if (res && res.ok) {
+        showToast('Email sent', 'success');
+        document.getElementById('compose-modal').classList.remove('active');
+        setTimeout(() => location.reload(), 800);
+      } else if (res) showToast(res.error || 'Send failed', 'error');
+    })
+    .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  function generateQueue() {
+    fetch('/api/queue/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) {
+          showToast('Queued ' + data.queued + ' leads', 'success');
+          setTimeout(() => location.reload(), 800);
+        } else showToast(data.error || 'Failed', 'error');
+      })
+      .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  function sendAll() {
+    if (!confirm('Send ALL queued emails?')) return;
+    const btn = document.getElementById('btn-send-all');
+    btn.disabled = true; btn.textContent = 'Sending...';
+    fetch('/api/queue/send-all', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        btn.disabled = false; btn.textContent = 'Send All Queued';
+        if (data.ok) {
+          showToast('Sent ' + data.sent + ', failed ' + data.failed, data.failed > 0 ? 'warning' : 'success');
+          setTimeout(() => location.reload(), 1000);
+        } else showToast(data.error || 'Failed', 'error');
+      })
+      .catch(err => { btn.disabled = false; btn.textContent = 'Send All Queued'; showToast('Error: ' + err.message, 'error'); });
+  }
+
+  function sendQueueItem(queueId) {
+    if (!confirm('Send this email?')) return;
+    fetch('/api/queue/' + queueId + '/send', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok || data.success) {
+          showToast('Email sent', 'success');
+          setTimeout(() => location.reload(), 800);
+        } else showToast(data.error || 'Failed', 'error');
+      })
+      .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  function skipQueueItem(queueId) {
+    if (!confirm('Skip this email?')) return;
+    fetch('/api/queue/' + queueId + '/skip', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) {
+          showToast('Skipped', 'info');
+          setTimeout(() => location.reload(), 500);
+        } else showToast(data.error || 'Failed', 'error');
+      })
+      .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  function reassignSender(selectEl) {
+    const queueId = selectEl.dataset.queueId;
+    const sender = selectEl.value;
+    fetch('/api/queue/' + queueId + '/reassign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sender_account: sender }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) showToast('Sender reassigned', 'success');
+      else showToast(data.error || 'Failed', 'error');
+    })
+    .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  function editQueueEmail(emailId) {
+    if (!emailId) return;
+    fetch('/api/emails/' + emailId + '/preview')
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) { showToast(data.error, 'error'); return; }
+        const container = document.getElementById('edit-email-content');
+        container.innerHTML =
+          '<div style="margin:12px 0;">' +
+            '<label class="text-dim text-sm" style="display:block;margin-bottom:4px;">Subject</label>' +
+            '<input type="text" id="modal-subject" class="search-input" style="width:100%;" value="' + escapeAttr(data.subject || '') + '">' +
+          '</div>' +
+          '<div style="margin:12px 0;">' +
+            '<label class="text-dim text-sm" style="display:block;margin-bottom:4px;">Sender Account</label>' +
+            '<select id="modal-sender" class="search-input" style="width:100%;">' +
+              {% for s in senders %}'<option value="{{ s.email }}">{{ s.display_name }} ({{ s.email }})</option>' +{% endfor %}
+            '</select>' +
+          '</div>' +
+          '<div style="margin:12px 0;">' +
+            '<label class="text-dim text-sm" style="display:block;margin-bottom:4px;">Body (HTML)</label>' +
+            '<textarea id="modal-body" class="search-input" style="width:100%;min-height:300px;resize:vertical;font-family:var(--mono);font-size:12px;">' + escapeHtml(data.html || '') + '</textarea>' +
+          '</div>' +
+          '<div class="flex gap-2" style="justify-content:flex-end;margin-top:8px;">' +
+            '<button class="btn btn-ghost" onclick="saveModalDraft(\'' + emailId + '\')">Save Draft</button>' +
+            '<button class="btn btn-primary" onclick="saveAndSendModal(\'' + emailId + '\')">Save & Send</button>' +
+          '</div>';
+        document.getElementById('edit-email-modal').classList.add('active');
+      })
+      .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  function saveModalDraft(emailId) {
+    const subject = document.getElementById('modal-subject').value;
+    const html_content = document.getElementById('modal-body').value;
+    const sender = document.getElementById('modal-sender').value;
+    fetch('/api/emails/' + emailId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subject, html_content, sender_account: sender }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) { showToast('Draft saved', 'success'); document.getElementById('edit-email-modal').classList.remove('active'); setTimeout(() => location.reload(), 500); }
+      else showToast(data.error || 'Failed', 'error');
+    })
+    .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  function saveAndSendModal(emailId) {
+    if (!confirm('Save and send this email?')) return;
+    const subject = document.getElementById('modal-subject').value;
+    const html_content = document.getElementById('modal-body').value;
+    const sender = document.getElementById('modal-sender').value;
+    // Save first
+    fetch('/api/emails/' + emailId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subject, html_content, sender_account: sender }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) { showToast(data.error || 'Save failed', 'error'); return; }
+      return fetch('/api/emails/' + emailId + '/send', { method: 'POST' });
+    })
+    .then(r => r ? r.json() : null)
+    .then(data => {
+      if (data && data.ok) {
+        showToast('Email sent', 'success');
+        document.getElementById('edit-email-modal').classList.remove('active');
+        setTimeout(() => location.reload(), 800);
+      } else if (data) showToast(data.error || 'Send failed', 'error');
+    })
+    .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  function sendDraftEmail(emailId) {
+    if (!confirm('Send this email?')) return;
+    fetch('/api/emails/' + emailId + '/send', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) { showToast('Email sent', 'success'); setTimeout(() => location.reload(), 800); }
+        else showToast(data.error || 'Failed', 'error');
+      })
+      .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  function skipDraftEmail(emailId) {
+    if (!confirm('Skip this email?')) return;
+    fetch('/api/emails/' + emailId + '/skip', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) { showToast('Skipped', 'info'); setTimeout(() => location.reload(), 500); }
+        else showToast(data.error || 'Failed', 'error');
+      })
+      .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  function filterDrafts() {
+    const touch = document.getElementById('filter-touch').value;
+    const sender = document.getElementById('filter-sender').value;
+    document.querySelectorAll('.draft-row').forEach(row => {
+      const matchTouch = !touch || row.dataset.touch === touch;
+      const matchSender = !sender || row.dataset.sender === sender;
+      row.style.display = (matchTouch && matchSender) ? '' : 'none';
+    });
+  }
+
+  function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str; return div.innerHTML; }
+  function escapeAttr(str) { return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+</script>
+{% endblock %}

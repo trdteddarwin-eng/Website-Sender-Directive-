@@ -22,8 +22,8 @@ function initDashboard(throughputData) {
       datasets: [{
         label: 'Leads Processed',
         data: values,
-        backgroundColor: '#d4922a44',
-        borderColor: '#d4922a',
+        backgroundColor: 'rgba(29,29,31,0.15)',
+        borderColor: '#1d1d1f',
         borderWidth: 1,
         borderRadius: 3,
       }],
@@ -34,12 +34,12 @@ function initDashboard(throughputData) {
       plugins: { legend: { display: false } },
       scales: {
         x: {
-          grid: { color: '#1e293b' },
-          ticks: { color: '#64748b', maxTicksLimit: 10, font: { size: 10 } },
+          grid: { color: 'rgba(0,0,0,0.06)' },
+          ticks: { color: '#86868b', maxTicksLimit: 10, font: { size: 10 } },
         },
         y: {
-          grid: { color: '#1e293b' },
-          ticks: { color: '#64748b', stepSize: 1 },
+          grid: { color: 'rgba(0,0,0,0.06)' },
+          ticks: { color: '#86868b', stepSize: 1 },
           beginAtZero: true,
         },
       },

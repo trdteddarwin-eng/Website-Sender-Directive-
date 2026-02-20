@@ -3,6 +3,7 @@
 import os
 import sys
 import json
+import logging
 import subprocess
 import threading
 import time
@@ -12,6 +13,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config import WORKSPACE_ROOT, TMP_DIR, EXECUTION_DIR, PALETTES, HERO_STYLES, OPENROUTER_API_KEY
 from services import supabase_client as db
 from services.sse_manager import sse
+
+# Set up file logger for pipeline errors
+LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "log-processes")
+os.makedirs(LOG_DIR, exist_ok=True)
+error_logger = logging.getLogger("pipeline_errors")
+error_logger.setLevel(logging.ERROR)
+_handler = logging.FileHandler(os.path.join(LOG_DIR, "errors.log"))
+_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
+if not error_logger.handlers:
+    error_logger.addHandler(_handler)
 
 
 class PipelineRunner:
@@ -35,10 +46,14 @@ class PipelineRunner:
                 cwd=WORKSPACE_ROOT,
                 env={**os.environ, "PYTHONPATH": WORKSPACE_ROOT},
             )
+            if result.returncode != 0:
+                error_logger.error(f"Script {script_name} exited {result.returncode} for {self.slug}: {result.stderr[:500]}")
             return result.returncode == 0, result.stdout, result.stderr
         except subprocess.TimeoutExpired:
+            error_logger.error(f"Script {script_name} timed out after {timeout}s for {self.slug}")
             return False, "", f"Timeout after {timeout}s"
         except Exception as e:
+            error_logger.error(f"Script {script_name} failed for {self.slug}: {str(e)}")
             return False, "", str(e)
 
     def _log(self, agent, message):
@@ -63,6 +78,8 @@ class PipelineRunner:
         if not run:
             return
         agents = run.get("agents", {})
+        if isinstance(agents, str):
+            agents = json.loads(agents)
         agent_data = agents.get(agent, {})
         agent_data["status"] = status
         agent_data["task"] = task
@@ -86,19 +103,61 @@ class PipelineRunner:
             "slug": self.slug, **agent_data,
         })
 
-    def run(self):
-        """Execute the full pipeline. Call from a background thread."""
+    def run(self, resume=False):
+        """Execute the full pipeline. Call from a background thread.
+
+        If resume=True, skip steps whose agents are already marked 'done'
+        and preserve existing work directory files.
+        """
+        import shutil
+
+        # Determine which agents are already done (for resume)
+        done_agents = set()
+        if resume:
+            run = db.get_pipeline_run(self.run_id)
+            if run:
+                agents = run.get("agents", {})
+                for agent_name, info in agents.items():
+                    if isinstance(info, dict) and info.get("status") == "done":
+                        done_agents.add(agent_name)
+                # Restore log entries from prior run
+                self._log_entries = run.get("log", []) if isinstance(run.get("log"), list) else []
+
+        if not resume:
+            # Clear stale artifacts from prior runs so every step re-executes
+            if os.path.exists(self.work_dir):
+                shutil.rmtree(self.work_dir)
         os.makedirs(self.work_dir, exist_ok=True)
 
-        # Update lead status
+        # Update run status back to running
+        db.update_pipeline_run(self.run_id, {"status": "running"})
         db.update_lead(self.slug, {"pipeline_status": "researching"})
         sse.publish("pipeline_started", {"slug": self.slug, "lead": self.lead})
 
         try:
-            self._run_researcher()
-            self._run_designer()
-            self._run_judge()
-            self._run_ops()
+            if "researcher" not in done_agents:
+                self._run_researcher()
+            else:
+                self._log("system", "Skipping researcher (already done)")
+                self._update_agent("researcher", "done", "Complete (resumed)")
+
+            if "designer" not in done_agents:
+                self._run_designer()
+            else:
+                self._log("system", "Skipping designer (already done)")
+                self._update_agent("designer", "done", "Complete (resumed)")
+
+            if "judge" not in done_agents:
+                self._run_judge()
+            else:
+                self._log("system", "Skipping judge (already done)")
+                self._update_agent("judge", "done", "Complete (resumed)")
+
+            if "ops" not in done_agents:
+                self._run_ops()
+            else:
+                self._log("system", "Skipping ops (already done)")
+                self._update_agent("ops", "done", "Complete (resumed)")
 
             db.update_pipeline_run(self.run_id, {
                 "status": "completed",
@@ -109,6 +168,7 @@ class PipelineRunner:
             sse.publish("pipeline_completed", {"slug": self.slug})
 
         except Exception as e:
+            error_logger.error(f"Pipeline failed for {self.slug}: {str(e)}", exc_info=True)
             db.update_pipeline_run(self.run_id, {"status": "failed"})
             db.update_lead(self.slug, {"pipeline_status": "failed"})
             self._log("system", f"Pipeline failed: {str(e)}")
@@ -216,7 +276,7 @@ class PipelineRunner:
                 "--palette_index", str(self.palette_index),
                 "--hero_style_index", str(self.hero_style_index),
                 "--output", html_out,
-            ], timeout=120)
+            ], timeout=480)
             if ok:
                 self._log("designer", "Spec site HTML generated")
             else:
@@ -293,13 +353,26 @@ class PipelineRunner:
         else:
             combined_score = struct_score
 
-        db.update_pipeline_run(self.run_id, {
-            "judge_score": combined_score,
-            "judge_struct_score": struct_score,
-            "judge_visual_score": visual_score,
-            "judge_visual_recommendation": visual_recommendation,
-            "new_screenshot_path": new_screenshot,
-        })
+        # Store judge results — only use columns that exist in the table
+        # Extra details go into the judge's agent data via _update_agent
+        try:
+            db.update_pipeline_run(self.run_id, {
+                "judge_score": combined_score,
+            })
+        except Exception:
+            pass  # judge_score column may not exist either; score stored in agents below
+
+        # Store detailed scores in the agents JSONB
+        run = db.get_pipeline_run(self.run_id)
+        if run:
+            agents = run.get("agents", {})
+            judge_data = agents.get("judge", {})
+            judge_data["struct_score"] = struct_score
+            judge_data["visual_score"] = visual_score
+            judge_data["visual_recommendation"] = visual_recommendation
+            judge_data["combined_score"] = combined_score
+            agents["judge"] = judge_data
+            db.update_pipeline_run(self.run_id, {"agents": agents})
         self._log("judge", f"Combined score: {combined_score}/100 (struct={struct_score}, visual={visual_score})")
 
         self._update_agent("judge", "done", "", completed_task=f"Score: {combined_score}/100 ({visual_recommendation})")
@@ -365,8 +438,12 @@ class PipelineRunner:
                 deploy_url = json.load(f).get("deploy_url", "")
         self._update_agent("ops", "working", "Generating outreach email", completed_task="Deployed to Netlify")
 
-        # Save spec site to Supabase
+        # Save spec site to Supabase (including full HTML)
         if deploy_url:
+            html_content = ""
+            if os.path.exists(html_path):
+                with open(html_path, "r") as f:
+                    html_content = f.read()
             db.create_spec_site({
                 "lead_id": self.lead["id"],
                 "slug": self.slug,
@@ -375,6 +452,7 @@ class PipelineRunner:
                 "palette_index": self.palette_index,
                 "hero_style": HERO_STYLES[self.hero_style_index],
                 "html_path": html_path,
+                "html_content": html_content,
                 "screenshot_path": os.path.join(self.work_dir, "new-site.png"),
             })
 
@@ -412,13 +490,15 @@ class PipelineRunner:
             self._log("ops", "Outreach email generated")
         else:
             self._log("ops", f"Email generation failed: {err[:100]}")
-        self._update_agent("ops", "working", "Creating Gmail draft", completed_task="Email generated")
+        self._update_agent("ops", "working", "Creating email draft", completed_task="Email generated")
 
-        # 4c: Create Gmail draft
+        # 4c: Assign sender via round-robin and store as Supabase draft (SMTP-ready)
+        from services.smtp_sender import get_next_sender
+        sender_acc = get_next_sender()
+        sender_email = sender_acc["email"] if sender_acc else None
+
         email_meta_path = os.path.join(self.work_dir, "email-meta.json")
         email_html_path = os.path.join(self.work_dir, "outreach-email.html")
-        draft_id = ""
-        thread_id = ""
 
         if os.path.exists(email_meta_path):
             with open(email_meta_path) as f:
@@ -428,26 +508,7 @@ class PipelineRunner:
             subject = meta.get("subject", "")
 
             if to_email and subject:
-                attach_args = []
-                if os.path.exists(old_screenshot) and old_screenshot_usable:
-                    attach_args += ["--attach", f"{old_screenshot}:old-site-screenshot"]
-                if os.path.exists(new_screenshot):
-                    attach_args += ["--attach", f"{new_screenshot}:new-site-screenshot"]
-
-                ok, out, err = self._run_script("create_gmail_draft.py", [
-                    "--to", to_email, "--subject", subject,
-                    "--html_file", email_html_path,
-                ] + attach_args, timeout=30)
-                if ok:
-                    self._log("ops", f"Gmail draft created for {to_email}")
-                    # Try to parse draft ID from output
-                    for line in out.split("\n"):
-                        if "Draft ID:" in line:
-                            draft_id = line.split("Draft ID:")[-1].strip()
-                else:
-                    self._log("ops", f"Gmail draft failed: {err[:100]}")
-
-                # Save email to Supabase
+                # Save email to Supabase as draft (no Gmail draft needed)
                 html_content = ""
                 if os.path.exists(email_html_path):
                     with open(email_html_path) as f:
@@ -458,12 +519,18 @@ class PipelineRunner:
                     "slug": self.slug,
                     "touchpoint": 1,
                     "subject": subject,
+                    "to_email": to_email,
                     "html_content": html_content,
                     "html_path": email_html_path,
                     "status": "draft",
-                    "gmail_draft_id": draft_id,
+                    "sender_account": sender_email,
+                    "sent_via": "smtp",
                 })
-        self._update_agent("ops", "working", "Generating follow-ups", completed_task="Gmail draft created")
+                if sender_email:
+                    self._log("ops", f"Email draft created — sender: {sender_email}")
+                else:
+                    self._log("ops", "Email draft created (no sender assigned)")
+        self._update_agent("ops", "working", "Generating follow-ups", completed_task="Email draft created")
 
         # 4d: Generate follow-up emails
         if deploy_url:
@@ -494,24 +561,42 @@ class PipelineRunner:
                             "slug": self.slug,
                             "touchpoint": touch,
                             "subject": fu_meta.get("subject", ""),
+                            "to_email": self.lead.get("email", ""),
                             "html_content": fu_html,
                             "html_path": html_path_fu,
                             "status": "draft",
                             "scheduled_send_date": send_date,
+                            "sender_account": sender_email,
+                            "sent_via": "smtp",
                         })
             else:
                 self._log("ops", f"Follow-up generation failed: {err[:100]}")
 
         # Create email sequence
         from datetime import timedelta
-        db.create_sequence({
+        seq_data = {
             "lead_id": self.lead["id"],
             "slug": self.slug,
             "status": "active",
             "current_touchpoint": 1,
             "next_send_date": datetime.utcnow().strftime("%Y-%m-%d"),
             "spec_site_url": deploy_url,
-        })
+        }
+        try:
+            db.create_sequence(seq_data)
+        except Exception as e:
+            self._log("ops", f"Sequence creation warning: {str(e)[:100]}")
+            # Retry without optional fields that may not exist in schema
+            try:
+                db.create_sequence({
+                    "lead_id": self.lead["id"],
+                    "slug": self.slug,
+                    "status": "active",
+                    "current_touchpoint": 1,
+                    "next_send_date": datetime.utcnow().strftime("%Y-%m-%d"),
+                })
+            except Exception as e2:
+                self._log("ops", f"Sequence creation failed: {str(e2)[:100]}")
 
         self._update_agent("ops", "done", "", completed_task="Follow-ups created")
         self._log("ops", "Ops phase complete")
@@ -536,6 +621,34 @@ def start_pipeline(lead, palette_index=None, hero_style_index=None):
     runner = PipelineRunner(lead, palette_index, hero_style_index, run["id"])
 
     thread = threading.Thread(target=runner.run, daemon=True)
+    thread.start()
+
+    return run
+
+
+def resume_pipeline(run_id):
+    """Resume a failed pipeline run from where it left off.
+
+    Reuses the existing run record and work directory.
+    Returns the pipeline_run dict.
+    """
+    run = db.get_pipeline_run(run_id)
+    if not run:
+        raise RuntimeError("Pipeline run not found")
+    if run["status"] not in ("failed",):
+        raise RuntimeError(f"Can only resume failed runs (current: {run['status']})")
+
+    slug = run["slug"]
+    lead = db.get_lead_by_slug(slug)
+    if not lead:
+        raise RuntimeError(f"Lead not found: {slug}")
+
+    palette_index = run.get("palette_index", 0)
+    hero_style_index = run.get("hero_style_index", 0)
+
+    runner = PipelineRunner(lead, palette_index, hero_style_index, run_id)
+
+    thread = threading.Thread(target=runner.run, kwargs={"resume": True}, daemon=True)
     thread.start()
 
     return run

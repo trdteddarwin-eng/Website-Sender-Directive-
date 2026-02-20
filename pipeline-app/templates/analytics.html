@@ -72,13 +72,57 @@
     </div>
   </div>
 
-  <!-- Sends Per Day -->
+  <!-- Sends Per Day (actual sends, not pipeline completions) -->
   <div class="card">
     <div class="card-header">
-      <div class="card-title">Sends Per Day (30 Days)</div>
+      <div class="card-title">Emails Sent Per Day (30 Days)</div>
     </div>
     <div class="chart-container">
       <canvas id="sends-chart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Charts Row 3: Sends Per Inbox + Sender Performance -->
+<div class="grid-2 mb-6">
+  <!-- Sends Per Inbox -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Sends Per Inbox</div>
+    </div>
+    <div class="chart-container">
+      <canvas id="sender-bar-chart"></canvas>
+    </div>
+  </div>
+
+  <!-- Open & Reply Rates by Sender -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Open & Reply Rates by Sender</div>
+    </div>
+    <div class="chart-container">
+      <canvas id="sender-rates-chart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Charts Row 4: Sequence Funnel -->
+<div class="grid-2 mb-6">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Sequence Funnel (by Touchpoint)</div>
+    </div>
+    <div class="chart-container">
+      <canvas id="sequence-chart"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Pipeline Throughput (30 Days)</div>
+    </div>
+    <div class="chart-container">
+      <canvas id="throughput-chart"></canvas>
     </div>
   </div>
 </div>
@@ -89,9 +133,9 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script>
   /* ── Shared chart defaults ── */
-  Chart.defaults.color = '#64748b';
-  Chart.defaults.borderColor = '#1e293b';
-  Chart.defaults.font.family = "'Inter', sans-serif";
+  Chart.defaults.color = '#86868b';
+  Chart.defaults.borderColor = '#e5e5e7';
+  Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif";
   Chart.defaults.font.size = 12;
 
   /* ── 1. Conversion Funnel (horizontal bar) ── */
@@ -102,7 +146,6 @@
     const emailsSent = {{ email_stats.sent or 0 }};
     const replied = {{ email_stats.replied or 0 }};
 
-    // Funnel stages: Qualified -> Researched (completed) -> Sites Built (completed) -> Emailed -> Replied
     new Chart(ctx, {
       type: 'bar',
       data: {
@@ -110,19 +153,13 @@
         datasets: [{
           data: [total, completed, completed, emailsSent, replied],
           backgroundColor: [
-            'rgba(212, 146, 42, 0.7)',
-            'rgba(167, 139, 250, 0.7)',
-            'rgba(244, 114, 182, 0.7)',
-            'rgba(59, 130, 246, 0.7)',
-            'rgba(34, 197, 94, 0.7)',
+            'rgba(29,29,31,0.8)',
+            'rgba(29,29,31,0.65)',
+            'rgba(29,29,31,0.5)',
+            'rgba(29,29,31,0.35)',
+            'rgba(29,29,31,0.2)',
           ],
-          borderColor: [
-            '#d4922a',
-            '#a78bfa',
-            '#f472b6',
-            '#3b82f6',
-            '#22c55e',
-          ],
+          borderColor: ['#1d1d1f', '#1d1d1f', '#1d1d1f', '#1d1d1f', '#1d1d1f'],
           borderWidth: 1,
           borderRadius: 4,
         }]
@@ -143,13 +180,8 @@
           }
         },
         scales: {
-          x: {
-            beginAtZero: true,
-            grid: { color: 'rgba(30, 41, 59, 0.5)' },
-          },
-          y: {
-            grid: { display: false },
-          }
+          x: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' } },
+          y: { grid: { display: false } }
         }
       }
     });
@@ -171,12 +203,12 @@
             {{ email_stats.bounced or 0 }},
           ],
           backgroundColor: [
-            'rgba(59, 130, 246, 0.7)',
-            'rgba(34, 197, 94, 0.7)',
-            'rgba(167, 139, 250, 0.7)',
-            'rgba(239, 68, 68, 0.7)',
+            'rgba(29,29,31,0.8)',
+            'rgba(29,29,31,0.6)',
+            'rgba(29,29,31,0.4)',
+            'rgba(29,29,31,0.2)',
           ],
-          borderColor: ['#3b82f6', '#22c55e', '#a78bfa', '#ef4444'],
+          borderColor: ['#1d1d1f', '#1d1d1f', '#1d1d1f', '#1d1d1f'],
           borderWidth: 1,
           borderRadius: 4,
         }]
@@ -184,23 +216,16 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-        },
+        plugins: { legend: { display: false } },
         scales: {
-          y: {
-            beginAtZero: true,
-            grid: { color: 'rgba(30, 41, 59, 0.5)' },
-          },
-          x: {
-            grid: { display: false },
-          }
+          y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' } },
+          x: { grid: { display: false } }
         }
       }
     });
   })();
 
-  /* ── 3. Reply Sentiment (pie chart) ── */
+  /* ── 3. Reply Sentiment (doughnut) ── */
   (function() {
     const ctx = document.getElementById('sentiment-chart').getContext('2d');
     const replyStats = {{ reply_stats | tojson }};
@@ -211,10 +236,10 @@
     const borderColors = [];
 
     const colorMap = {
-      positive:      { bg: 'rgba(34, 197, 94, 0.7)',  border: '#22c55e' },
-      negative:      { bg: 'rgba(239, 68, 68, 0.7)',  border: '#ef4444' },
-      neutral:       { bg: 'rgba(100, 116, 139, 0.7)', border: '#64748b' },
-      out_of_office: { bg: 'rgba(245, 158, 11, 0.7)', border: '#f59e0b' },
+      positive:      { bg: 'rgba(52,199,89,0.7)',  border: '#34c759' },
+      negative:      { bg: 'rgba(255,59,48,0.7)',  border: '#ff3b30' },
+      neutral:       { bg: 'rgba(134,134,139,0.7)', border: '#86868b' },
+      out_of_office: { bg: 'rgba(255,149,0,0.7)', border: '#ff9500' },
     };
 
     ['positive', 'negative', 'neutral', 'out_of_office'].forEach(function(key) {
@@ -230,48 +255,209 @@
     if (data.length === 0) {
       labels.push('No Replies');
       data.push(1);
-      bgColors.push('rgba(30, 41, 59, 0.5)');
-      borderColors.push('#1e293b');
+      bgColors.push('rgba(229,229,231,0.5)');
+      borderColors.push('#e5e5e7');
     }
 
     new Chart(ctx, {
       type: 'doughnut',
+      data: { labels, datasets: [{ data, backgroundColor: bgColors, borderColor: borderColors, borderWidth: 1 }] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'right', labels: { padding: 16, usePointStyle: true, pointStyle: 'circle' } } },
+      }
+    });
+  })();
+
+  /* ── 4. Emails Sent Per Day (line chart — uses actual sent_at) ── */
+  (function() {
+    const ctx = document.getElementById('sends-chart').getContext('2d');
+    const dailySends = {{ daily_sends | tojson }};
+
+    const dates = Object.keys(dailySends).sort();
+    const values = dates.map(function(d) { return dailySends[d]; });
+    const labels = dates.map(function(d) { const p = d.split('-'); return p[1] + '/' + p[2]; });
+
+    new Chart(ctx, {
+      type: 'line',
       data: {
         labels: labels,
         datasets: [{
-          data: data,
-          backgroundColor: bgColors,
-          borderColor: borderColors,
-          borderWidth: 1,
+          label: 'Emails Sent',
+          data: values,
+          borderColor: '#1d1d1f',
+          backgroundColor: 'rgba(29,29,31,0.06)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: '#1d1d1f',
+          borderWidth: 2,
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            position: 'right',
-            labels: { padding: 16, usePointStyle: true, pointStyle: 'circle' },
-          },
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { stepSize: 1 } },
+          x: { grid: { display: false }, ticks: { maxTicksLimit: 15, maxRotation: 0 } }
         },
+        interaction: { intersect: false, mode: 'index' },
       }
     });
   })();
 
-  /* ── 4. Sends Per Day (line chart) ── */
+  /* ── 5. Sends Per Inbox (bar chart) ── */
   (function() {
-    const ctx = document.getElementById('sends-chart').getContext('2d');
+    const ctx = document.getElementById('sender-bar-chart').getContext('2d');
+    const senderPerf = {{ sender_perf | tojson }};
+
+    const senders = Object.keys(senderPerf);
+    const senderLabels = senders.map(function(s) { return s.split('@')[0]; });
+    const sentData = senders.map(function(s) { return senderPerf[s].sent; });
+
+    const bgColors = senders.map(function() { return 'rgba(29,29,31,0.7)'; });
+    const bdColors = senders.map(function() { return '#1d1d1f'; });
+
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: senderLabels,
+        datasets: [{
+          label: 'Total Sent',
+          data: sentData,
+          backgroundColor: bgColors,
+          borderColor: bdColors,
+          borderWidth: 1,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' } },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+  })();
+
+  /* ── 6. Open & Reply Rates by Sender (grouped bar) ── */
+  (function() {
+    const ctx = document.getElementById('sender-rates-chart').getContext('2d');
+    const senderPerf = {{ sender_perf | tojson }};
+
+    const senders = Object.keys(senderPerf);
+    const senderLabels = senders.map(function(s) { return s.split('@')[0]; });
+    const openRates = senders.map(function(s) { return senderPerf[s].open_rate; });
+    const replyRates = senders.map(function(s) { return senderPerf[s].reply_rate; });
+
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: senderLabels,
+        datasets: [
+          {
+            label: 'Open Rate %',
+            data: openRates,
+            backgroundColor: 'rgba(29,29,31,0.7)',
+            borderColor: '#1d1d1f',
+            borderWidth: 1,
+            borderRadius: 4,
+          },
+          {
+            label: 'Reply Rate %',
+            data: replyRates,
+            backgroundColor: 'rgba(134,134,139,0.5)',
+            borderColor: '#86868b',
+            borderWidth: 1,
+            borderRadius: 4,
+          },
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { usePointStyle: true, pointStyle: 'circle' } },
+        },
+        scales: {
+          y: { beginAtZero: true, max: 100, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { callback: function(v) { return v + '%'; } } },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+  })();
+
+  /* ── 7. Sequence Funnel (horizontal bar — by touchpoint) ── */
+  (function() {
+    const ctx = document.getElementById('sequence-chart').getContext('2d');
+    const seqStats = {{ sequence_stats | tojson }};
+
+    const touches = [1, 2, 3, 4];
+    const labels = touches.map(function(t) { return 'Touch ' + t; });
+    const sentData = touches.map(function(t) { return (seqStats[t] || {}).sent || 0; });
+    const openedData = touches.map(function(t) { return (seqStats[t] || {}).opened || 0; });
+    const repliedData = touches.map(function(t) { return (seqStats[t] || {}).replied || 0; });
+
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Sent',
+            data: sentData,
+            backgroundColor: 'rgba(29,29,31,0.8)',
+            borderColor: '#1d1d1f',
+            borderWidth: 1,
+            borderRadius: 4,
+          },
+          {
+            label: 'Opened',
+            data: openedData,
+            backgroundColor: 'rgba(29,29,31,0.5)',
+            borderColor: '#86868b',
+            borderWidth: 1,
+            borderRadius: 4,
+          },
+          {
+            label: 'Replied',
+            data: repliedData,
+            backgroundColor: 'rgba(29,29,31,0.25)',
+            borderColor: '#aeaeb2',
+            borderWidth: 1,
+            borderRadius: 4,
+          },
+        ]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { usePointStyle: true, pointStyle: 'circle' } },
+        },
+        scales: {
+          x: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' } },
+          y: { grid: { display: false } }
+        }
+      }
+    });
+  })();
+
+  /* ── 8. Pipeline Throughput (line chart — leads processed per day) ── */
+  (function() {
+    const ctx = document.getElementById('throughput-chart').getContext('2d');
     const throughput = {{ throughput | tojson }};
 
-    // Sort dates and build arrays
     const dates = Object.keys(throughput).sort();
     const values = dates.map(function(d) { return throughput[d]; });
-
-    // Format dates as MM/DD
-    const labels = dates.map(function(d) {
-      const parts = d.split('-');
-      return parts[1] + '/' + parts[2];
-    });
+    const labels = dates.map(function(d) { const p = d.split('-'); return p[1] + '/' + p[2]; });
 
     new Chart(ctx, {
       type: 'line',
@@ -280,40 +466,25 @@
         datasets: [{
           label: 'Leads Processed',
           data: values,
-          borderColor: '#d4922a',
-          backgroundColor: 'rgba(212, 146, 42, 0.1)',
+          borderColor: '#1d1d1f',
+          backgroundColor: 'rgba(29,29,31,0.06)',
           fill: true,
           tension: 0.3,
           pointRadius: 3,
           pointHoverRadius: 5,
-          pointBackgroundColor: '#d4922a',
+          pointBackgroundColor: '#1d1d1f',
           borderWidth: 2,
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-        },
+        plugins: { legend: { display: false } },
         scales: {
-          y: {
-            beginAtZero: true,
-            grid: { color: 'rgba(30, 41, 59, 0.5)' },
-            ticks: { stepSize: 1 },
-          },
-          x: {
-            grid: { display: false },
-            ticks: {
-              maxTicksLimit: 15,
-              maxRotation: 0,
-            },
-          }
+          y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { stepSize: 1 } },
+          x: { grid: { display: false }, ticks: { maxTicksLimit: 15, maxRotation: 0 } }
         },
-        interaction: {
-          intersect: false,
-          mode: 'index',
-        },
+        interaction: { intersect: false, mode: 'index' },
       }
     });
   })();

@@ -2,7 +2,7 @@
 
 import os
 from flask import Blueprint, render_template
-from config import GOOGLE_SHEET_URL, GOOGLE_TOKEN_PATH, OPENROUTER_API_KEY, NETLIFY_AUTH_TOKEN, ANTHROPIC_API_KEY
+from config import SUPABASE_URL, SUPABASE_KEY, OPENROUTER_API_KEY, NETLIFY_AUTH_TOKEN, ANTHROPIC_API_KEY
 
 settings_bp = Blueprint("settings", __name__)
 
@@ -17,18 +17,19 @@ def settings_page():
             return "***"
         return key[:4] + "..." + key[-4:]
 
-    sheets_configured = os.path.exists(GOOGLE_TOKEN_PATH)
-    sheets_lead_count = 0
-    if sheets_configured:
+    supabase_configured = bool(SUPABASE_URL and SUPABASE_KEY and "YOUR_" not in SUPABASE_URL)
+    supabase_lead_count = 0
+    if supabase_configured:
         try:
             from services import supabase_client as db
             counts = db.get_lead_counts()
-            sheets_lead_count = counts.get("total", 0)
+            supabase_lead_count = counts.get("total", 0)
         except Exception:
             pass
 
     keys = {
-        "GOOGLE_SHEET": GOOGLE_SHEET_URL[:60] + "..." if GOOGLE_SHEET_URL else "(not set)",
+        "SUPABASE_URL": mask(SUPABASE_URL) if SUPABASE_URL else "(not set)",
+        "SUPABASE_KEY": mask(SUPABASE_KEY) if SUPABASE_KEY else "(not set)",
         "OPENROUTER_API_KEY": mask(OPENROUTER_API_KEY),
         "NETLIFY_AUTH_TOKEN": mask(NETLIFY_AUTH_TOKEN),
         "ANTHROPIC_API_KEY": mask(ANTHROPIC_API_KEY),
@@ -48,5 +49,5 @@ def settings_page():
                            keys=keys,
                            gmail_ok=gmail_ok,
                            gmail_email=gmail_email,
-                           sheets_configured=sheets_configured,
-                           sheets_lead_count=sheets_lead_count)
+                           supabase_configured=supabase_configured,
+                           supabase_lead_count=supabase_lead_count)

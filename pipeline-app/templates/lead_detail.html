@@ -37,6 +37,7 @@
       <span class="text-mono" style="font-size: 20px; font-weight: 700; margin-left: 8px;">{{ lead.lead_score }}</span>
       <span class="text-dim text-sm">score</span>
     {% endif %}
+    <button class="btn btn-ghost" onclick="openEditModal()">Edit</button>
     <a href="/leads" class="btn btn-ghost" style="margin-left: 16px;">Back</a>
     {% if lead.status != 'completed' and lead.status != 'processing' %}
     <button class="btn btn-primary" onclick="runPipeline('{{ lead.slug }}')">Run Pipeline</button>
@@ -131,13 +132,13 @@
   </div>
 
   <!-- Raw data display from lead record -->
-  {% if lead.raw_data %}
+  {% if lead.raw_data and lead.raw_data is mapping %}
   <div class="card mt-4">
     <div class="card-header">
       <div class="card-title">Raw Import Data</div>
     </div>
     <div style="max-height: 300px; overflow-y: auto;">
-      {% for key, val in lead.raw_data.items() if lead.raw_data is mapping %}
+      {% for key, val in lead.raw_data.items() %}
       <div class="settings-row">
         <div class="settings-label">{{ key }}</div>
         <div class="settings-value" style="max-width: 60%; text-align: right; word-break: break-word;">{{ val }}</div>
@@ -208,6 +209,7 @@
         <tr>
           <th>Touch</th>
           <th>Subject</th>
+          <th>Sender</th>
           <th>Status</th>
           <th>Sent At</th>
           <th>Actions</th>
@@ -223,6 +225,13 @@
             <div style="font-weight: 500;">{{ email.subject or '(no subject)' }}</div>
             {% if email.to_email %}
             <div class="text-dim text-sm">To: {{ email.to_email }}</div>
+            {% endif %}
+          </td>
+          <td>
+            {% if email.sender_account %}
+            <span style="font-size: 12px; font-weight: 500;">{{ email.sender_account.split('@')[0] }}</span>
+            {% else %}
+            <span class="text-dim text-sm">—</span>
             {% endif %}
           </td>
           <td>
@@ -304,6 +313,93 @@
     </div>
   </div>
   {% endif %}
+</div>
+
+<!-- Edit Lead Modal -->
+<div class="modal-overlay" id="edit-lead-modal" onclick="if(event.target===this) this.classList.remove('active')">
+  <div class="modal" style="max-width: 600px;">
+    <div class="modal-title">
+      <span>Edit Lead</span>
+      <button class="modal-close" onclick="document.getElementById('edit-lead-modal').classList.remove('active')">&times;</button>
+    </div>
+    <form id="edit-lead-form" onsubmit="submitEditLead(event)" style="display: grid; gap: 12px; margin-top: 12px;">
+      <div>
+        <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">Company Name</label>
+        <input type="text" name="company_name" class="search-input" style="width: 100%;" value="{{ lead.company_name or '' }}">
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">First Name</label>
+          <input type="text" name="first_name" class="search-input" style="width: 100%;" value="{{ lead.first_name or '' }}">
+        </div>
+        <div>
+          <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">Last Name</label>
+          <input type="text" name="last_name" class="search-input" style="width: 100%;" value="{{ lead.last_name or '' }}">
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">Email</label>
+          <input type="email" name="email" class="search-input" style="width: 100%;" value="{{ lead.email or '' }}">
+        </div>
+        <div>
+          <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">Phone</label>
+          <input type="text" name="phone" class="search-input" style="width: 100%;" value="{{ lead.phone or '' }}">
+        </div>
+      </div>
+      <div>
+        <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">Website</label>
+        <input type="text" name="website" class="search-input" style="width: 100%;" value="{{ lead.website or '' }}">
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">City</label>
+          <input type="text" name="city" class="search-input" style="width: 100%;" value="{{ lead.city or '' }}">
+        </div>
+        <div>
+          <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">State</label>
+          <input type="text" name="state" class="search-input" style="width: 100%;" value="{{ lead.state or '' }}">
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">Lead Tier</label>
+          <select name="lead_tier" class="search-input" style="width: 100%;">
+            <option value="cold" {{ 'selected' if lead.tier == 'cold' or lead.lead_tier == 'cold' }}>Cold</option>
+            <option value="warm" {{ 'selected' if lead.tier == 'warm' or lead.lead_tier == 'warm' }}>Warm</option>
+            <option value="hot" {{ 'selected' if lead.tier == 'hot' or lead.lead_tier == 'hot' }}>Hot</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">Lead Score</label>
+          <input type="number" name="lead_score" class="search-input" style="width: 100%;" value="{{ lead.lead_score or 0 }}" min="0" max="100">
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">Pipeline Status</label>
+          <select name="pipeline_status" class="search-input" style="width: 100%;">
+            <option value="pending" {{ 'selected' if lead.status == 'pending' or lead.pipeline_status == 'pending' }}>Pending</option>
+            <option value="processing" {{ 'selected' if lead.status == 'processing' or lead.pipeline_status == 'processing' }}>Processing</option>
+            <option value="completed" {{ 'selected' if lead.status == 'completed' or lead.pipeline_status == 'completed' }}>Completed</option>
+            <option value="failed" {{ 'selected' if lead.status == 'failed' or lead.pipeline_status == 'failed' }}>Failed</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">Industry</label>
+          <input type="text" name="industry" class="search-input" style="width: 100%;" value="{{ lead.industry or '' }}">
+        </div>
+      </div>
+      <div>
+        <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">Company Description</label>
+        <textarea name="company_description" class="search-input" style="width: 100%; min-height: 80px; resize: vertical;">{{ lead.company_description or '' }}</textarea>
+      </div>
+      <div class="flex gap-2" style="justify-content: flex-end; margin-top: 8px;">
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('edit-lead-modal').classList.remove('active')">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="btn-edit-lead">Save Changes</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 {% endif %}
@@ -399,19 +495,111 @@
           return;
         }
         const modal = document.getElementById('modal-content');
-        modal.innerHTML = `
-          <div class="modal-title">
-            <span>Touch ${data.touchpoint}: ${escapeHtml(data.subject || '(no subject)')}</span>
-            <button class="modal-close" onclick="closeModal()">&times;</button>
-          </div>
-          <div style="margin-bottom: 8px;"><span class="badge badge-${data.status || 'draft'}">${data.status || 'draft'}</span></div>
-          <div style="background: #fff; border-radius: 8px; padding: 20px; max-height: 400px; overflow-y: auto;">
-            ${data.html || '<p style="color: #999;">No HTML content</p>'}
-          </div>
-        `;
+        const isDraft = (data.status === 'draft' || data.status === 'pending');
+
+        let html = '<div class="modal-title">' +
+          '<span>Touch ' + data.touchpoint + '</span>' +
+          '<button class="modal-close" onclick="closeModal()">&times;</button>' +
+        '</div>' +
+        '<div style="margin-bottom: 12px;"><span class="badge badge-' + (data.status || 'draft') + '">' + (data.status || 'draft') + '</span></div>';
+
+        if (isDraft) {
+          html += '<div style="margin-bottom: 12px;">' +
+            '<label class="text-dim text-sm" style="display:block;margin-bottom:4px;">Subject</label>' +
+            '<input type="text" id="edit-email-subject" class="search-input" style="width:100%;" value="' + escapeHtml(data.subject || '') + '">' +
+          '</div>' +
+          '<div style="margin-bottom: 12px;">' +
+            '<label class="text-dim text-sm" style="display:block;margin-bottom:4px;">Sender Account</label>' +
+            '<select id="edit-email-sender" class="search-input" style="width:100%;"></select>' +
+          '</div>' +
+          '<div style="margin-bottom: 12px;">' +
+            '<label class="text-dim text-sm" style="display:block;margin-bottom:4px;">Body (HTML)</label>' +
+            '<textarea id="edit-email-body" class="search-input" style="width:100%;min-height:250px;resize:vertical;font-family:var(--mono);font-size:12px;">' + escapeHtml(data.html || '') + '</textarea>' +
+          '</div>' +
+          '<div class="flex gap-2" style="justify-content:flex-end;">' +
+            '<button class="btn btn-ghost" onclick="saveEmailDraft(\'' + emailId + '\')">Save Draft</button>' +
+            '<button class="btn btn-primary" onclick="saveAndSendEmail(\'' + emailId + '\')">Send Now</button>' +
+          '</div>';
+          // Load sender accounts into dropdown
+          fetch('/api/senders').then(r => r.json()).then(sd => {
+            if (sd.ok) {
+              const sel = document.getElementById('edit-email-sender');
+              if (sel) {
+                sel.innerHTML = sd.senders.map(s =>
+                  '<option value="' + s.email + '">' + s.display_name + ' (' + s.email + ')</option>'
+                ).join('');
+              }
+            }
+          }).catch(() => {});
+        } else {
+          html += '<div style="margin-bottom:8px;font-weight:500;">' + escapeHtml(data.subject || '(no subject)') + '</div>' +
+            '<div style="background:#fff;border-radius:8px;padding:20px;max-height:400px;overflow-y:auto;">' +
+            (data.html || '<p style="color:#999;">No HTML content</p>') +
+            '</div>';
+        }
+
+        modal.innerHTML = html;
         document.getElementById('modal-overlay').classList.add('active');
       })
       .catch(err => showToast('Preview failed: ' + err.message, 'error'));
+  }
+
+  function saveEmailDraft(emailId) {
+    const subject = document.getElementById('edit-email-subject').value;
+    const html_content = document.getElementById('edit-email-body').value;
+    const senderEl = document.getElementById('edit-email-sender');
+    const payload = { subject: subject, html_content: html_content };
+    if (senderEl && senderEl.value) payload.sender_account = senderEl.value;
+
+    fetch('/api/emails/' + emailId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        showToast('Draft saved', 'success');
+      } else {
+        showToast(data.error || 'Save failed', 'error');
+      }
+    })
+    .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  function saveAndSendEmail(emailId) {
+    if (!confirm('Save changes and send this email?')) return;
+    const subject = document.getElementById('edit-email-subject').value;
+    const html_content = document.getElementById('edit-email-body').value;
+    const senderEl = document.getElementById('edit-email-sender');
+    const payload = { subject: subject, html_content: html_content };
+    if (senderEl && senderEl.value) payload.sender_account = senderEl.value;
+
+    // First save
+    fetch('/api/emails/' + emailId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) {
+        showToast(data.error || 'Save failed', 'error');
+        return;
+      }
+      // Then send
+      return fetch('/api/emails/' + emailId + '/send', { method: 'POST' });
+    })
+    .then(r => r ? r.json() : null)
+    .then(data => {
+      if (data && data.ok) {
+        showToast('Email sent', 'success');
+        setTimeout(() => location.reload(), 1000);
+      } else if (data) {
+        showToast(data.error || 'Send failed', 'error');
+      }
+    })
+    .catch(err => showToast('Error: ' + err.message, 'error'));
   }
 
   function sendEmail(emailId) {
@@ -472,5 +660,53 @@
   document.getElementById('modal-overlay').addEventListener('click', function(e) {
     if (e.target === this) closeModal();
   });
+
+  /* ── Edit Lead ── */
+  function openEditModal() {
+    document.getElementById('edit-lead-modal').classList.add('active');
+  }
+
+  function submitEditLead(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btn-edit-lead');
+    const form = document.getElementById('edit-lead-form');
+    const data = {};
+    new FormData(form).forEach((v, k) => { if (v !== '') data[k] = v; });
+
+    // Convert lead_score to number
+    if (data.lead_score) data.lead_score = parseInt(data.lead_score, 10);
+
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+
+    const slug = '{{ lead.slug if lead else "" }}';
+    fetch('/api/leads/' + slug, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+    .then(r => r.json())
+    .then(result => {
+      btn.disabled = false;
+      btn.textContent = 'Save Changes';
+      if (result.ok) {
+        showToast('Lead updated', 'success');
+        document.getElementById('edit-lead-modal').classList.remove('active');
+        setTimeout(() => location.reload(), 800);
+      } else {
+        showToast(result.error || 'Failed to update', 'error');
+      }
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.textContent = 'Save Changes';
+      showToast('Error: ' + err.message, 'error');
+    });
+  }
+
+  // Auto-open edit modal if ?edit=1 in URL
+  if (new URLSearchParams(window.location.search).get('edit') === '1') {
+    openEditModal();
+  }
 </script>
 {% endblock %}

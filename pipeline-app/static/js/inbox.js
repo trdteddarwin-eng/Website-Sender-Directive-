@@ -162,6 +162,9 @@ async function openMessage(uid) {
         frame.style.height = frame.contentDocument.body.scrollHeight + 20 + 'px';
       } catch(e) {}
     };
+
+    // Check for auto-reply status
+    checkAutoReply(uid);
   } catch (e) {
     pane.innerHTML = '<div class="empty-state"><p>Connection error</p></div>';
   }
@@ -287,10 +290,110 @@ async function fetchBadges() {
     } catch(err) {}
   });
 
+  es.addEventListener('auto_reply_sent', function(e) {
+    try {
+      const data = JSON.parse(e.data);
+      showToast(`Auto-replied to ${data.from_email || data.slug} (${data.sentiment})`, 'success');
+    } catch(err) {}
+  });
+
+  es.addEventListener('auto_reply_drafted', function(e) {
+    try {
+      const data = JSON.parse(e.data);
+      showToast(`Draft reply saved for ${data.from_email || data.slug} — review needed`, 'warning');
+    } catch(err) {}
+  });
+
   es.onerror = function() {
     // Reconnect handled by EventSource automatically
   };
 })();
+
+// ── Auto-Reply ─────────────────────────────────────────
+
+async function checkAutoReply(uid) {
+  try {
+    const r = await fetch('/api/inbox/auto-replies');
+    const d = await r.json();
+    if (!d.ok) return;
+
+    const match = d.auto_replies.find(ar => ar.incoming_uid === uid);
+    if (!match) return;
+
+    const pane = document.getElementById('reading-pane');
+    const header = pane.querySelector('.inbox-reading-header');
+    if (!header) return;
+
+    // Add badge to subject line
+    const subjectEl = header.querySelector('.inbox-reading-subject');
+    if (subjectEl) {
+      if (match.status === 'sent') {
+        subjectEl.innerHTML += ' <span style="display:inline-block;background:#34c759;color:#fff;font-size:11px;padding:2px 8px;border-radius:4px;margin-left:8px;vertical-align:middle">Auto-replied</span>';
+      } else if (match.status === 'draft') {
+        subjectEl.innerHTML += ' <span style="display:inline-block;background:#1d1d1f;color:#fff;font-size:11px;padding:2px 8px;border-radius:4px;margin-left:8px;vertical-align:middle">Draft reply</span>';
+      } else if (match.status === 'skipped_ooo') {
+        subjectEl.innerHTML += ' <span style="display:inline-block;background:#86868b;color:#fff;font-size:11px;padding:2px 8px;border-radius:4px;margin-left:8px;vertical-align:middle">Out of Office</span>';
+      }
+    }
+
+    // If draft, show editable reply panel
+    if (match.status === 'draft') {
+      const panel = document.createElement('div');
+      panel.className = 'auto-reply-draft-panel';
+      panel.style.cssText = 'margin-top:16px;padding:16px;background:var(--card,#fff);border:1px solid var(--card-border,#e5e5e7);border-radius:8px;';
+      panel.innerHTML = `
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--text-dim,#aaa)">
+          Draft Reply (${escapeHtml(match.sentiment)}) — <span style="color:var(--text,#1d1d1f)">${escapeHtml(match.account)}</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-dim,#888);margin-bottom:8px">Subject: ${escapeHtml(match.reply_subject || '')}</div>
+        <textarea id="draft-reply-body" style="width:100%;min-height:120px;padding:10px;background:var(--input-bg,#f5f5f7);color:var(--text,#1d1d1f);border:1px solid var(--card-border,#e5e5e7);border-radius:6px;font-family:inherit;font-size:14px;resize:vertical;line-height:1.5">${escapeHtml(match.reply_body || '')}</textarea>
+        <div style="margin-top:10px;display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" onclick="sendDraftReply('${match.id}')">Send Reply</button>
+          <span id="draft-reply-status" style="font-size:12px;color:var(--text-dim,#888);line-height:32px"></span>
+        </div>
+      `;
+      // Insert after the reading body
+      const readingBody = pane.querySelector('.inbox-reading-body');
+      if (readingBody) {
+        readingBody.after(panel);
+      } else {
+        pane.appendChild(panel);
+      }
+    }
+  } catch(e) {
+    // Silently ignore — auto-reply check is non-critical
+  }
+}
+
+async function sendDraftReply(id) {
+  const statusEl = document.getElementById('draft-reply-status');
+  const bodyEl = document.getElementById('draft-reply-body');
+  if (statusEl) statusEl.textContent = 'Sending...';
+
+  try {
+    const r = await fetch('/api/inbox/send-draft-reply', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id: id, body: bodyEl ? bodyEl.value : undefined})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      if (statusEl) statusEl.textContent = '';
+      showToast('Reply sent!', 'success');
+      // Replace the panel with a sent badge
+      const panel = document.querySelector('.auto-reply-draft-panel');
+      if (panel) {
+        panel.innerHTML = '<div style="color:#22c55e;font-weight:600;font-size:13px;padding:8px 0">Reply sent successfully</div>';
+      }
+    } else {
+      if (statusEl) statusEl.textContent = d.error || 'Failed to send';
+      showToast(d.error || 'Failed to send reply', 'error');
+    }
+  } catch(e) {
+    if (statusEl) statusEl.textContent = 'Connection error';
+    showToast('Connection error', 'error');
+  }
+}
 
 // ── Helpers ────────────────────────────────────────────
 

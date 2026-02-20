@@ -31,6 +31,11 @@ CREATE TABLE IF NOT EXISTS leads (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Add columns that may be missing on existing tables
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS full_name TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS company_description TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS send_step TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_leads_slug ON leads(slug);
 CREATE INDEX IF NOT EXISTS idx_leads_tier ON leads(lead_tier);
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(pipeline_status);
@@ -152,3 +157,23 @@ CREATE TABLE IF NOT EXISTS activity_log (
 CREATE INDEX IF NOT EXISTS idx_activity_slug ON activity_log(slug);
 CREATE INDEX IF NOT EXISTS idx_activity_type ON activity_log(event_type);
 CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_log(created_at DESC);
+
+-- 8. auto_replies
+CREATE TABLE IF NOT EXISTS auto_replies (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    lead_id UUID REFERENCES leads(id) ON DELETE SET NULL,
+    slug TEXT,
+    account TEXT,
+    incoming_uid TEXT UNIQUE,
+    incoming_from TEXT,
+    incoming_subject TEXT,
+    incoming_body_preview TEXT,
+    sentiment TEXT DEFAULT 'neutral',
+    reply_subject TEXT,
+    reply_body TEXT,
+    status TEXT DEFAULT 'draft',
+    sent_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_auto_replies_uid ON auto_replies(incoming_uid);
+CREATE INDEX IF NOT EXISTS idx_auto_replies_status ON auto_replies(status);

@@ -8,6 +8,7 @@
   </div>
   <div class="flex gap-2">
     <button class="btn btn-ghost" onclick="window.location.href='/leads?sort=lead_score&dir=desc'">Reset Filters</button>
+    <button class="btn btn-primary" onclick="document.getElementById('add-lead-modal').classList.add('active')">Add Lead</button>
   </div>
 </div>
 
@@ -114,6 +115,7 @@
         </td>
         <td>
           <div class="flex gap-2">
+            <a href="/leads/{{ lead.slug }}?edit=1" class="btn btn-sm btn-ghost" title="Edit">&#9998;</a>
             <a href="/leads/{{ lead.slug }}" class="btn btn-sm btn-ghost">View</a>
             {% if lead.status != 'completed' and lead.status != 'processing' %}
             <button class="btn btn-sm btn-primary" onclick="runPipeline('{{ lead.slug }}')">Run Pipeline</button>
@@ -138,7 +140,7 @@
 {% if total_pages > 1 %}
 <div class="pagination">
   {% if page > 1 %}
-    <a href="{{ paginationUrl(page - 1) }}" onclick="goToPage({{ page - 1 }}); return false;">&laquo; Prev</a>
+    <a href="#" onclick="goToPage({{ page - 1 }}); return false;">&laquo; Prev</a>
   {% endif %}
 
   {% for p in range(1, total_pages + 1) %}
@@ -156,6 +158,76 @@
   {% endif %}
 </div>
 {% endif %}
+
+<!-- Add Lead Modal -->
+<div class="modal-overlay" id="add-lead-modal" onclick="if(event.target===this) this.classList.remove('active')">
+  <div class="modal" style="max-width: 520px;">
+    <div id="modal-content">
+      <div class="modal-title">
+        <span>Add New Lead</span>
+        <button class="modal-close" onclick="document.getElementById('add-lead-modal').classList.remove('active')">&times;</button>
+      </div>
+      <form id="add-lead-form" onsubmit="submitNewLead(event)" style="display: grid; gap: 12px; margin-top: 12px;">
+        <div>
+          <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">Company Name *</label>
+          <input type="text" name="company_name" required class="search-input" style="width: 100%;" placeholder="Acme HVAC Services">
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">First Name</label>
+            <input type="text" name="first_name" class="search-input" style="width: 100%;">
+          </div>
+          <div>
+            <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">Last Name</label>
+            <input type="text" name="last_name" class="search-input" style="width: 100%;">
+          </div>
+        </div>
+        <div>
+          <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">Email</label>
+          <input type="email" name="email" class="search-input" style="width: 100%;">
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">Phone</label>
+            <input type="text" name="phone" class="search-input" style="width: 100%;">
+          </div>
+          <div>
+            <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">Website</label>
+            <input type="text" name="website" class="search-input" style="width: 100%;" placeholder="https://...">
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">City</label>
+            <input type="text" name="city" class="search-input" style="width: 100%;">
+          </div>
+          <div>
+            <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">State</label>
+            <input type="text" name="state" class="search-input" style="width: 100%;">
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">Lead Tier</label>
+            <select name="lead_tier" class="search-input" style="width: 100%;">
+              <option value="cold">Cold</option>
+              <option value="warm">Warm</option>
+              <option value="hot">Hot</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-dim text-sm" style="display: block; margin-bottom: 4px;">Lead Score</label>
+            <input type="number" name="lead_score" class="search-input" style="width: 100%;" value="0" min="0" max="100">
+          </div>
+        </div>
+        <div class="flex gap-2" style="justify-content: flex-end; margin-top: 8px;">
+          <button type="button" class="btn btn-ghost" onclick="document.getElementById('add-lead-modal').classList.remove('active')">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-add-lead">Add Lead</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 
 {% endblock %}
 
@@ -198,6 +270,46 @@
 
   function goToPage(p) {
     window.location.href = buildUrl({ page: p });
+  }
+
+  /* ── Add new lead ── */
+  function submitNewLead(e) {
+    e.preventDefault();
+    const form = document.getElementById('add-lead-form');
+    const btn = document.getElementById('btn-add-lead');
+    const data = {};
+    new FormData(form).forEach((v, k) => { if (v) data[k] = v; });
+
+    if (!data.company_name) {
+      showToast('Company name is required', 'error');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Adding...';
+
+    fetch('/api/leads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+    .then(r => r.json())
+    .then(result => {
+      btn.disabled = false;
+      btn.textContent = 'Add Lead';
+      if (result.ok) {
+        showToast('Lead added: ' + data.company_name, 'success');
+        document.getElementById('add-lead-modal').classList.remove('active');
+        setTimeout(() => location.reload(), 800);
+      } else {
+        showToast(result.error || 'Failed to add lead', 'error');
+      }
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.textContent = 'Add Lead';
+      showToast('Error: ' + err.message, 'error');
+    });
   }
 
   /* ── Run pipeline for a specific lead ── */

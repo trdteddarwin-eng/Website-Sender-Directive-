@@ -7,6 +7,7 @@
     <div class="subtitle">Live agent monitor</div>
   </div>
   <div class="flex gap-2">
+    <button class="btn btn-ghost" onclick="openRunLeadModal()">Run Lead...</button>
     {% if next_lead %}
     <button class="btn btn-primary" id="btn-run-next" onclick="runNext()">
       Run Next Lead
@@ -20,9 +21,9 @@
 </div>
 
 <!-- Active Run Banner -->
-<div id="active-run-banner" class="card mb-4" style="{% if not active_run %}display:none;{% endif %} border-left: 3px solid var(--blue);">
+<div id="active-run-banner" class="card mb-4" style="{% if not active_run %}display:none;{% endif %} border-left: 3px solid var(--accent);">
   <div class="flex items-center gap-3">
-    <div class="spinner"></div>
+    <div class="spinner" id="active-run-spinner"></div>
     <div>
       <div style="font-weight: 600;" id="active-run-lead">
         {% if active_run %}Processing: {{ active_run.slug or 'unknown' }}{% endif %}
@@ -31,7 +32,8 @@
         {% if active_run %}Step: {{ active_run.current_step or 'starting' }}{% endif %}
       </div>
     </div>
-    <div class="ml-auto">
+    <div class="ml-auto flex gap-2 items-center">
+      <button class="btn btn-sm btn-primary" id="active-run-retry" style="display:none;" onclick="resumeActiveRun()">Retry from Failure</button>
       <span class="agent-timer text-mono" id="active-run-timer">00:00</span>
     </div>
   </div>
@@ -42,7 +44,7 @@
   <!-- Researcher -->
   <div class="agent-card waiting" id="agent-researcher">
     <div class="agent-header">
-      <div class="agent-name" style="color: var(--purple);">Researcher</div>
+      <div class="agent-name">Researcher</div>
       <span class="badge badge-pending" id="agent-researcher-badge">Idle</span>
     </div>
     <div class="agent-task" id="agent-researcher-task">Waiting for lead...</div>
@@ -56,7 +58,7 @@
   <!-- Designer -->
   <div class="agent-card waiting" id="agent-designer">
     <div class="agent-header">
-      <div class="agent-name" style="color: var(--pink);">Designer</div>
+      <div class="agent-name">Designer</div>
       <span class="badge badge-pending" id="agent-designer-badge">Idle</span>
     </div>
     <div class="agent-task" id="agent-designer-task">Waiting for research...</div>
@@ -70,7 +72,7 @@
   <!-- Judge -->
   <div class="agent-card waiting" id="agent-judge">
     <div class="agent-header">
-      <div class="agent-name" style="color: var(--orange);">Judge</div>
+      <div class="agent-name">Judge</div>
       <span class="badge badge-pending" id="agent-judge-badge">Idle</span>
     </div>
     <div class="agent-task" id="agent-judge-task">Waiting for site...</div>
@@ -84,7 +86,7 @@
   <!-- Ops -->
   <div class="agent-card waiting" id="agent-ops">
     <div class="agent-header">
-      <div class="agent-name" style="color: var(--green);">Ops</div>
+      <div class="agent-name">Ops</div>
       <span class="badge badge-pending" id="agent-ops-badge">Idle</span>
     </div>
     <div class="agent-task" id="agent-ops-task">Waiting for approval...</div>
@@ -180,6 +182,7 @@
           <th>Status</th>
           <th>Started</th>
           <th>Duration</th>
+          <th>Action</th>
         </tr>
       </thead>
       <tbody>
@@ -197,6 +200,11 @@
               —
             {% endif %}
           </td>
+          <td>
+            {% if run.status == 'failed' %}
+            <button class="btn btn-sm btn-primary" onclick="resumeRun('{{ run.id }}')">Retry</button>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -204,6 +212,20 @@
   </div>
 </div>
 {% endif %}
+
+<!-- Run Lead Modal -->
+<div class="modal-overlay" id="run-lead-modal" onclick="if(event.target===this) this.classList.remove('active')">
+  <div class="modal" style="max-width: 500px;">
+    <div class="modal-title">
+      <span>Run Lead</span>
+      <button class="modal-close" onclick="document.getElementById('run-lead-modal').classList.remove('active')">&times;</button>
+    </div>
+    <div style="margin: 12px 0;">
+      <input type="text" id="lead-search-input" class="search-input" style="width: 100%;" placeholder="Search by company name..." oninput="searchLeads(this.value)" autocomplete="off">
+    </div>
+    <div id="lead-search-results" style="max-height: 300px; overflow-y: auto;"></div>
+  </div>
+</div>
 
 {% endblock %}
 
@@ -213,6 +235,7 @@
   let agentTimers = {};
   let runStartTime = null;
   let timerInterval = null;
+  let currentRunId = null;
 
   /* ── SSE Connection ── */
   const evtSource = new EventSource('/api/pipeline/stream');
@@ -330,10 +353,15 @@
   /* ── Run lifecycle ── */
   function startRun(slug, data) {
     runStartTime = Date.now();
+    if (data && data.run_id) currentRunId = data.run_id;
     const banner = document.getElementById('active-run-banner');
     banner.style.display = '';
+    banner.style.borderLeftColor = 'var(--accent)';
     document.getElementById('active-run-lead').textContent = 'Processing: ' + slug;
     document.getElementById('active-run-status').textContent = 'Step: starting';
+    document.getElementById('active-run-retry').style.display = 'none';
+    var spinner = document.getElementById('active-run-spinner');
+    if (spinner) spinner.style.display = '';
 
     // Reset agents
     ['researcher', 'designer', 'judge', 'ops'].forEach(a => {
@@ -349,16 +377,19 @@
 
   function endRun(slug, data, isError) {
     if (timerInterval) clearInterval(timerInterval);
+    if (data && data.run_id) currentRunId = data.run_id;
     const banner = document.getElementById('active-run-banner');
     if (isError) {
       banner.style.borderLeftColor = 'var(--red)';
-      document.getElementById('active-run-status').textContent = 'Failed: ' + (data.message || 'Unknown error');
+      document.getElementById('active-run-status').textContent = 'Failed: ' + (data.error || data.message || 'Unknown error');
+      document.getElementById('active-run-retry').style.display = '';
     } else {
       banner.style.borderLeftColor = 'var(--green)';
       document.getElementById('active-run-status').textContent = 'Completed';
+      document.getElementById('active-run-retry').style.display = 'none';
     }
     // Stop spinner
-    const spinner = banner.querySelector('.spinner');
+    var spinner = document.getElementById('active-run-spinner');
     if (spinner) spinner.style.display = 'none';
   }
 
@@ -464,6 +495,78 @@
     .catch(err => showToast('Error: ' + err.message, 'error'));
   }
 
+  /* ── Run Lead modal ── */
+  let _searchTimeout = null;
+  function openRunLeadModal() {
+    document.getElementById('lead-search-input').value = '';
+    document.getElementById('lead-search-results').innerHTML = '<div class="text-dim text-sm" style="padding:12px;">Type to search leads...</div>';
+    document.getElementById('run-lead-modal').classList.add('active');
+    setTimeout(() => document.getElementById('lead-search-input').focus(), 100);
+  }
+
+  function searchLeads(q) {
+    clearTimeout(_searchTimeout);
+    if (q.trim().length < 2) {
+      document.getElementById('lead-search-results').innerHTML = '<div class="text-dim text-sm" style="padding:12px;">Type at least 2 characters...</div>';
+      return;
+    }
+    _searchTimeout = setTimeout(() => {
+      fetch('/api/leads/search?q=' + encodeURIComponent(q.trim()))
+        .then(r => r.json())
+        .then(data => {
+          const container = document.getElementById('lead-search-results');
+          if (!data.leads || data.leads.length === 0) {
+            container.innerHTML = '<div class="text-dim text-sm" style="padding:12px;">No leads found.</div>';
+            return;
+          }
+          container.innerHTML = data.leads.map(l =>
+            '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--card-border);cursor:pointer;" onmouseenter="this.style.background=\'var(--bg-hover)\'" onmouseleave="this.style.background=\'none\'">' +
+              '<div>' +
+                '<div style="font-weight:600;">' + escapeHtml(l.company_name) + '</div>' +
+                '<div class="text-dim text-sm">' + escapeHtml(l.slug) + ' &middot; score ' + l.score + '</div>' +
+              '</div>' +
+              '<div class="flex gap-2 items-center">' +
+                '<span class="badge badge-' + l.status + '">' + l.status + '</span>' +
+                '<button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); runFromModal(\'' + escapeHtml(l.slug) + '\')">Run</button>' +
+              '</div>' +
+            '</div>'
+          ).join('');
+        })
+        .catch(err => {
+          document.getElementById('lead-search-results').innerHTML = '<div class="text-dim text-sm" style="padding:12px;color:var(--red);">Search failed.</div>';
+        });
+    }, 250);
+  }
+
+  /* ── Resume failed runs ── */
+  function resumeRun(runId) {
+    fetch('/api/pipeline/resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ run_id: runId }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        currentRunId = runId;
+        showToast('Resuming pipeline for ' + (data.slug || ''), 'success');
+      } else {
+        showToast(data.error || 'Resume failed', 'error');
+      }
+    })
+    .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  function resumeActiveRun() {
+    if (currentRunId) resumeRun(currentRunId);
+    else showToast('No run to retry', 'error');
+  }
+
+  function runFromModal(slug) {
+    document.getElementById('run-lead-modal').classList.remove('active');
+    runSpecific(slug);
+  }
+
   function runSpecific(slug) {
     fetch('/api/pipeline/run', {
       method: 'POST',
@@ -490,8 +593,9 @@
         const run = data.run;
         const slug = run.slug || '';
         const lead = data.lead;
+        currentRunId = run.id;
 
-        startRun(slug, { lead: lead });
+        startRun(slug, { lead: lead, run_id: run.id });
 
         // Hydrate each agent
         ['researcher', 'designer', 'judge', 'ops'].forEach(function(agent) {
@@ -526,5 +630,63 @@
       })
       .catch(function() {});
   })();
+
+  /* ── Fallback: poll DB every 5s to catch missed SSE events ── */
+  setInterval(function() {
+    fetch('/api/pipeline/status')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.active || !data.run) return;
+        var run = data.run;
+
+        // If run is completed or failed, handle it
+        if (run.status === 'completed') {
+          endRun(run.slug || '', run);
+          showPreview(run.slug || '');
+          return;
+        }
+        if (run.status === 'failed') {
+          endRun(run.slug || '', run, true);
+          return;
+        }
+
+        // Ensure run banner is visible
+        var banner = document.getElementById('active-run-banner');
+        if (banner.style.display === 'none') {
+          startRun(run.slug || '', { lead: data.lead });
+        }
+
+        // Update agents from DB state
+        ['researcher', 'designer', 'judge', 'ops'].forEach(function(agent) {
+          var info = (run.agents || {})[agent];
+          if (!info) return;
+          var currentBadge = document.getElementById('agent-' + agent + '-badge');
+          var currentState = currentBadge ? currentBadge.textContent.toLowerCase() : 'idle';
+
+          if (info.status === 'done' && currentState !== 'done') {
+            setAgentState(agent, 'done', 'Complete');
+            stopAgentTimer(agent);
+          } else if (info.status === 'working' && currentState === 'idle') {
+            setAgentState(agent, 'working', info.task || 'Working...');
+            if (!agentTimers[agent]) startAgentTimer(agent);
+          }
+
+          // Update completed tasks
+          if (info.completed_tasks && info.completed_tasks.length > 0) {
+            var el = document.getElementById('agent-' + agent + '-completed');
+            if (el && el.textContent === '\u2014') {
+              el.innerHTML = '';
+              info.completed_tasks.forEach(function(t) {
+                var item = document.createElement('div');
+                item.className = 'completed-item';
+                item.textContent = t;
+                el.appendChild(item);
+              });
+            }
+          }
+        });
+      })
+      .catch(function() {});
+  }, 5000);
 </script>
 {% endblock %}

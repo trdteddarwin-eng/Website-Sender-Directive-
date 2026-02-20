@@ -194,6 +194,8 @@ def fetch_message_body(account, uid):
                 else:
                     text_body = decoded
 
+        message_id = msg.get("Message-ID", "")
+
         return {
             "uid": uid,
             "from_name": from_name or from_addr,
@@ -201,6 +203,7 @@ def fetch_message_body(account, uid):
             "to": to_raw,
             "subject": subject,
             "date": date_str,
+            "message_id": message_id,
             "html": html_body,
             "text": text_body,
         }

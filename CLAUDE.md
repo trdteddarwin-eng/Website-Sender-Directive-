@@ -191,3 +191,33 @@ Also, use Opus-4.5 for everything while building. It came out a few days ago and
 - **Why:** Agents added CSS scroll-reveal animations (.reveal { opacity: 0 }) triggered by IntersectionObserver on scroll. Playwright takes static screenshots without scrolling, so animated sections stay invisible.
 - **Fix:** Added JS injection to screenshot_website.py that forces all .reveal elements visible before capture. Also: directive updated to warn agents not to use scroll-triggered opacity animations in spec sites.
 - **Rule:** In screenshot_website.py, always force-reveal hidden animated elements before capturing. In spec site builds, never use opacity:0 scroll animations — use CSS-only animations (e.g., fade on page load) or skip animations entirely since the site is for screenshot/demo purposes.
+
+### [2026-02-19] Lead detail page crashes: 'str object' has no attribute 'items'
+- **What happened:** Every lead detail page returned 500 error
+- **Why:** `lead.raw_data` is stored as a JSON string in Supabase, not a dict. Jinja2's `{% for key, val in lead.raw_data.items() if lead.raw_data is mapping %}` evaluates `.items()` BEFORE the `if` filter (the `if` in a for-loop is a post-filter, not a pre-condition).
+- **Fix:** Changed outer `{% if %}` to `{% if lead.raw_data and lead.raw_data is mapping %}` so the check runs before iteration.
+- **Rule:** Never use `if` filters inside Jinja2 `{% for %}` loops to guard against type errors. Always wrap the entire for-loop in a separate `{% if %}` block that validates the type first.
+
+### [2026-02-19] Pipeline page stuck — all agents show IDLE after running
+- **What happened:** After clicking "Run Next Lead", pipeline page shows all 4 agents as IDLE/Waiting forever, even though the pipeline thread is running.
+- **Why:** SSE events published before the browser's EventSource connects are lost (no replay buffer). The pipeline thread starts immediately on POST and publishes events within milliseconds, but the browser takes 1+ seconds to navigate to /pipeline and establish the SSE connection.
+- **Fix:** Added a 5-second DB polling fallback in pipeline.html that fetches `/api/pipeline/status` and updates agent cards from the database state, catching any missed SSE events.
+- **Rule:** Never rely solely on SSE for critical UI state. Always add a polling fallback that hydrates from the database. SSE is for real-time feel; DB polling is for reliability.
+
+### [2026-02-19] Pipeline crashes: 'str' object has no attribute 'get' on agents field
+- **What happened:** Every pipeline run immediately fails with `'str' object has no attribute 'get'`
+- **Why:** `create_pipeline_run` stores `agents` and `log` as `json.dumps(...)` strings. When `get_pipeline_run` reads them back from Supabase, the columns come back as JSON strings (not dicts). `_update_agent()` then calls `.get()` on the string, which fails.
+- **Fix:** Added `_parse_run_json()` helper in `supabase_client.py` that auto-parses `agents` and `log` from JSON strings to dicts/lists. Applied to `get_pipeline_run`, `get_active_pipeline_run`, and `get_recent_pipeline_runs`.
+- **Rule:** Always deserialize JSONB/text columns at the data access layer. Never assume Supabase returns parsed objects for JSON-stored fields — always check `isinstance(val, str)` and `json.loads()` at read time.
+
+### [2026-02-19] Pipeline judge step crashes: PGRST204 missing columns + stale work dir
+- **What happened:** Judge phase fails with `Could not find the 'judge_struct_score' column of 'pipeline_runs'`. Designer phase also completes instantly (0 seconds) because it finds stale `index.html` from a prior run.
+- **Why:** `_run_judge()` tried to write `judge_struct_score`, `judge_visual_score`, `judge_visual_recommendation` directly to `pipeline_runs` table, but those columns don't exist in Supabase. Also, the work dir (`.tmp/{slug}/`) persists between runs, so `if not os.path.exists(html_out)` skips generation.
+- **Fix:** Moved judge detail fields into the `agents` JSONB (under `judge` key). Added `shutil.rmtree(work_dir)` at the start of `run()` to clear stale artifacts before each pipeline run.
+- **Rule:** Never write arbitrary columns to Supabase — only use columns that exist in the schema. Store extra metadata in JSONB fields (`agents`, `log`). Always clear the work directory at pipeline start to prevent stale file skips.
+
+### [2026-02-19] Designer timeout: subprocess kills script before HTTP timeout fires
+- **What happened:** Designer step fails every time with "Generation failed: Timeout after 120s". The `generate_spec_site.py` script calls OpenRouter's kimi-k2.5 model for 16K max tokens, which routinely takes 2-3 minutes.
+- **Why:** Both the subprocess timeout in `pipeline_runner.py` and the HTTP request timeout in `generate_spec_site.py` were set to exactly 120s. They race each other, and the subprocess kill fires before the script can catch its own timeout and print a useful error.
+- **Fix:** Rewrote `generate_spec_site.py` to split the site into 3 parallel API calls (top/middle/bottom sections, ~5K tokens each) instead of 1 monolithic 16K-token call. Each call has 180s timeout with 1 retry. CSS framework is Python-generated (deterministic). Subprocess timeout stays at 480s. Total wall time drops from 5-8 min to ~60-90s.
+- **Rule:** Never ask kimi-k2.5 (or similar slow models) for >6K output tokens in a single call. Split large generations into parallel sections with a shared CSS framework. Each section gets its own API call with its own timeout and retry. Deterministic parts (CSS, document structure) should be Python-generated, not LLM-generated.

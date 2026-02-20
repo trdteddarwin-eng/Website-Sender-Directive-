@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from flask import Flask
 
+from config import SECRET_KEY
 from blueprints.dashboard import dashboard_bp
 from blueprints.leads import leads_bp
 from blueprints.pipeline import pipeline_bp
@@ -17,13 +18,14 @@ from blueprints.analytics import analytics_bp
 from blueprints.settings import settings_bp
 from blueprints.api import api_bp
 from blueprints.inbox import inbox_bp
+from blueprints.drafts import drafts_bp
 
 
 def create_app():
     app = Flask(__name__,
                 template_folder="templates",
                 static_folder="static")
-    app.secret_key = os.urandom(24)
+    app.secret_key = SECRET_KEY or os.urandom(24)
 
     # Register blueprints
     app.register_blueprint(dashboard_bp)
@@ -34,6 +36,7 @@ def create_app():
     app.register_blueprint(settings_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(inbox_bp)
+    app.register_blueprint(drafts_bp)
 
     # Start background scheduler
     try:

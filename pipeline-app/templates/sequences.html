@@ -174,18 +174,90 @@
           return;
         }
         const modal = document.getElementById('modal-content');
-        modal.innerHTML =
-          '<div class="modal-title">' +
-            '<span>Touch ' + data.touchpoint + ': ' + escapeHtml(data.subject || '(no subject)') + '</span>' +
-            '<button class="modal-close" onclick="closeModal()">&times;</button>' +
+        const isDraft = (data.status === 'draft' || data.status === 'pending');
+
+        let html = '<div class="modal-title">' +
+          '<span>Touch ' + data.touchpoint + '</span>' +
+          '<button class="modal-close" onclick="closeModal()">&times;</button>' +
+        '</div>' +
+        '<div style="margin-bottom: 12px;"><span class="badge badge-' + (data.status || 'draft') + '">' + (data.status || 'draft') + '</span></div>';
+
+        if (isDraft) {
+          html += '<div style="margin-bottom: 12px;">' +
+            '<label class="text-dim text-sm" style="display:block;margin-bottom:4px;">Subject</label>' +
+            '<input type="text" id="edit-email-subject" class="search-input" style="width:100%;" value="' + escapeHtml(data.subject || '') + '">' +
           '</div>' +
-          '<div style="margin-bottom: 8px;"><span class="badge badge-' + (data.status || 'draft') + '">' + (data.status || 'draft') + '</span></div>' +
-          '<div style="background: #fff; border-radius: 8px; padding: 20px; max-height: 400px; overflow-y: auto;">' +
-            (data.html || '<p style="color: #999;">No HTML content</p>') +
+          '<div style="margin-bottom: 12px;">' +
+            '<label class="text-dim text-sm" style="display:block;margin-bottom:4px;">Body (HTML)</label>' +
+            '<textarea id="edit-email-body" class="search-input" style="width:100%;min-height:250px;resize:vertical;font-family:var(--mono);font-size:12px;">' + escapeHtml(data.html || '') + '</textarea>' +
+          '</div>' +
+          '<div class="flex gap-2" style="justify-content:flex-end;">' +
+            '<button class="btn btn-ghost" onclick="saveEmailDraft(\'' + emailId + '\')">Save Draft</button>' +
+            '<button class="btn btn-primary" onclick="saveAndSendEmail(\'' + emailId + '\')">Send Now</button>' +
           '</div>';
+        } else {
+          html += '<div style="margin-bottom:8px;font-weight:500;">' + escapeHtml(data.subject || '(no subject)') + '</div>' +
+            '<div style="background:#fff;border-radius:8px;padding:20px;max-height:400px;overflow-y:auto;">' +
+            (data.html || '<p style="color:#999;">No HTML content</p>') +
+            '</div>';
+        }
+
+        modal.innerHTML = html;
         document.getElementById('modal-overlay').classList.add('active');
       })
       .catch(err => showToast('Preview failed: ' + err.message, 'error'));
+  }
+
+  function saveEmailDraft(emailId) {
+    const subject = document.getElementById('edit-email-subject').value;
+    const html_content = document.getElementById('edit-email-body').value;
+
+    fetch('/api/emails/' + emailId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subject: subject, html_content: html_content }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        showToast('Draft saved', 'success');
+      } else {
+        showToast(data.error || 'Save failed', 'error');
+      }
+    })
+    .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  function saveAndSendEmail(emailId) {
+    if (!confirm('Save changes and send this email?')) return;
+    const subject = document.getElementById('edit-email-subject').value;
+    const html_content = document.getElementById('edit-email-body').value;
+
+    // First save
+    fetch('/api/emails/' + emailId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subject: subject, html_content: html_content }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) {
+        showToast(data.error || 'Save failed', 'error');
+        return;
+      }
+      // Then send
+      return fetch('/api/emails/' + emailId + '/send', { method: 'POST' });
+    })
+    .then(r => r ? r.json() : null)
+    .then(data => {
+      if (data && data.ok) {
+        showToast('Email sent', 'success');
+        setTimeout(() => location.reload(), 1000);
+      } else if (data) {
+        showToast(data.error || 'Send failed', 'error');
+      }
+    })
+    .catch(err => showToast('Error: ' + err.message, 'error'));
   }
 
   /* ── Send email ── */

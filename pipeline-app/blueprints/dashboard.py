@@ -13,6 +13,12 @@ def index():
         email_stats = db.get_email_stats()
         recent_activity = db.get_recent_activity(limit=20)
         due_sequences = db.get_due_sequences()
+        for seq in due_sequences:
+            lead = db.get_lead_by_id(seq.get("lead_id"))
+            seq["_lead"] = lead
+            touch = seq.get("current_touchpoint", 1)
+            emails = db.get_emails_for_lead(seq["lead_id"]) if seq.get("lead_id") else []
+            seq["_email"] = next((e for e in emails if e.get("touchpoint") == touch), None)
         throughput = db.get_pipeline_throughput(days=30)
     except Exception as e:
         counts = {"total": 0, "hot": 0, "warm": 0, "cold": 0, "pending": 0, "completed": 0, "processing": 0, "failed": 0}

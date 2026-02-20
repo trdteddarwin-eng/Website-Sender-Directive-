@@ -60,7 +60,7 @@ def import_leads_from_file(filepath):
                 "lead_score": lead.get("lead_score", 0),
                 "lead_tier": lead.get("lead_tier", "cold"),
                 "score_breakdown": lead.get("score_breakdown", {}),
-                "is_qualified_hvac": "yes" if (lead.get("is_qualified_hvac", "yes").lower() == "yes" if isinstance(lead.get("is_qualified_hvac"), str) else bool(lead.get("is_qualified_hvac", True))) else "no",
+                "is_qualified": lead.get("is_qualified_hvac", "yes").lower() == "yes" if isinstance(lead.get("is_qualified_hvac"), str) else bool(lead.get("is_qualified_hvac", True)),
                 "disqualification_reason": lead.get("disqualification_reason", ""),
             }
 

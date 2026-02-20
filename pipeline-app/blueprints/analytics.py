@@ -13,6 +13,10 @@ def analytics_page():
         email_stats = db.get_email_stats()
         reply_stats = db.get_reply_stats()
         throughput = db.get_pipeline_throughput(days=30)
+        daily_sends = db.get_daily_send_counts(days=30)
+        sender_perf = db.get_sender_performance()
+        sequence_stats = db.get_sequence_stats()
+        sends_per_sender = db.get_sends_per_sender(days=30)
 
         # Pipeline speed: average time from start to complete
         runs = db.get_recent_pipeline_runs(limit=100)
@@ -32,6 +36,10 @@ def analytics_page():
         email_stats = {"total": 0, "sent": 0, "opened": 0, "replied": 0, "bounced": 0, "open_rate": 0, "reply_rate": 0, "bounce_rate": 0}
         reply_stats = {"total": 0, "positive": 0, "negative": 0, "neutral": 0, "out_of_office": 0}
         throughput = {}
+        daily_sends = {}
+        sender_perf = {}
+        sequence_stats = {}
+        sends_per_sender = {}
         avg_minutes = 0
 
     return render_template("analytics.html",
@@ -39,4 +47,8 @@ def analytics_page():
                            email_stats=email_stats,
                            reply_stats=reply_stats,
                            throughput=throughput,
+                           daily_sends=daily_sends,
+                           sender_perf=sender_perf,
+                           sequence_stats=sequence_stats,
+                           sends_per_sender=sends_per_sender,
                            avg_minutes=avg_minutes)
