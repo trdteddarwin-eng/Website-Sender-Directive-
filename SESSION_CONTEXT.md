@@ -1,30 +1,27 @@
-# TedCA Pipeline Dashboard — Full System Overview
+# TedCA Pipeline Dashboard — Session Context
 
-Use this document to onboard a new Claude session. It covers everything built, how it works, what's been fixed, and where things stand.
+Use this to onboard a new Claude session. Copy the prompt at the bottom.
 
 ---
 
 ## What This System Does
 
-TedCA is an automated HVAC lead outreach pipeline. It takes raw leads from a Google Sheet, researches each company, generates a custom "spec website" for them, deploys it to Netlify, drafts personalized outreach emails with before/after screenshots, and manages a 4-touch email sequence — all from a single Flask dashboard.
+TedCA is an automated HVAC lead outreach pipeline. It takes leads from Supabase, researches each company, generates a custom "spec website," deploys it to Netlify, drafts personalized outreach emails with before/after screenshots, and manages a 4-touch email sequence — all from a Flask dashboard.
 
-**The flow for each lead:**
-1. **Research** — Scrape their website + Google reviews, run AI analysis (pain points, ROI estimate)
-2. **Design** — Generate a full custom HTML spec site via Claude (through OpenRouter API)
-3. **Judge** — Screenshot the new site, run quality checks (score 0-100)
-4. **Ops** — Deploy to Netlify, generate personalized outreach email + 3 follow-ups, create Gmail drafts
+**The pipeline flow for each lead:**
+1. **Researcher** — Scrape website + Google reviews, run AI analysis (pain points, ROI)
+2. **Designer** — Generate full custom HTML spec site via OpenRouter API
+3. **Judge** — Screenshot new site, run quality checks + K2.5 visual review (score 0-100)
+4. **Ops** — Deploy to Netlify, generate outreach email + 3 follow-ups, create drafts, create sequence
 
 ---
 
-## Architecture: 3-Layer System
+## Architecture
 
-**Layer 1: Directives** (`directives/`) — SOPs written in Markdown. Define goals, inputs, tools, outputs.
-
-**Layer 2: Orchestration** — Claude (you). Read directives, call execution tools, handle errors, update directives with learnings.
-
-**Layer 3: Execution** (`execution/`) — 80+ deterministic Python scripts. API calls, scraping, file ops. Reliable and testable.
-
-**Why:** LLMs are probabilistic. Business logic needs determinism. The 3-layer split means Claude only handles decision-making; everything else is pushed into tested Python scripts.
+**3-Layer System** (see `CLAUDE.md` for full details):
+- **Directives** (`directives/`) — SOPs in Markdown
+- **Orchestration** — Claude reads directives, calls tools, handles errors
+- **Execution** (`execution/`) — 80+ deterministic Python scripts
 
 ---
 
@@ -32,146 +29,96 @@ TedCA is an automated HVAC lead outreach pipeline. It takes raw leads from a Goo
 
 ```
 /Users/yoljean/Downloads/Ted Workspace/
-├── CLAUDE.md                 # Agent instructions (read this first — it's the system bible)
+├── CLAUDE.md                 # Agent instructions + error log (READ FIRST)
 ├── SESSION_CONTEXT.md        # This file
-├── .env                      # API keys (OPENROUTER_API_KEY, NETLIFY_AUTH_TOKEN, ANTHROPIC_API_KEY, KIE_API_KEY)
-├── token.json                # Google OAuth token (Sheets + Drive)
-├── credentials.json          # Google OAuth client credentials
-├── gmail_token.json          # Gmail OAuth token
-├── gmail_credentials.json    # Gmail OAuth client credentials
-├── directives/               # SOPs (spec_site_pipeline.md is the main one)
+├── .env                      # API keys (OPENROUTER, NETLIFY, ANTHROPIC, KIE, SUPABASE)
+├── directives/               # SOPs
 ├── execution/                # Python scripts (80+)
 ├── pipeline-app/             # Flask web dashboard
 │   ├── app.py                # Entry point — python3 pipeline-app/app.py (port 5050)
-│   ├── config.py             # Loads .env, defines paths, Google Sheet ID
+│   ├── config.py             # Loads .env, defines paths
+│   ├── schema.sql            # Full Supabase schema with ALTER TABLE migrations
 │   ├── services/
-│   │   ├── supabase_client.py  # DATA LAYER (misleading name — actually reads Google Sheets + local JSON)
-│   │   ├── pipeline_runner.py  # Orchestrates the 4-phase pipeline in a background thread
-│   │   ├── email_service.py    # Gmail API integration
-│   │   ├── lead_importer.py    # Import leads from JSON files into Google Sheets
-│   │   ├── reply_checker.py    # Polls Gmail threads for replies to sent emails
-│   │   ├── sequence_scheduler.py # APScheduler: reply checks every 5min, follow-up checks every 1hr
-│   │   └── sse_manager.py      # Server-Sent Events broadcaster for live pipeline updates
-│   ├── blueprints/             # Flask route handlers
-│   │   ├── dashboard.py        # GET / — KPIs, activity feed
-│   │   ├── leads.py            # GET /leads, GET /leads/<slug> — lead list + detail
-│   │   ├── pipeline.py         # GET /pipeline — live agent monitor with SSE
-│   │   ├── sequences.py        # GET /sequences — email sequence manager
-│   │   ├── analytics.py        # GET /analytics — charts and stats
-│   │   ├── settings.py         # GET /settings — connection status, API keys
-│   │   └── api.py              # All JSON API endpoints (/api/pipeline/run, /api/leads/import, etc.)
-│   ├── templates/              # Jinja2 HTML templates
+│   │   ├── supabase_client.py  # Data layer — ALL database operations
+│   │   ├── pipeline_runner.py  # 4-phase pipeline orchestrator (background thread)
+│   │   ├── smtp_sender.py      # SMTP email sending via @tedca.online accounts
+│   │   ├── daily_queue_service.py  # Daily send queue generation + execution
+│   │   ├── auto_reply_service.py   # AI-drafted replies to incoming emails
+│   │   ├── inbox_service.py    # IMAP inbox polling for @tedca.online accounts
+│   │   ├── sequence_scheduler.py   # APScheduler: reply checks, queue generation
+│   │   └── sse_manager.py     # Server-Sent Events for live pipeline updates
+│   ├── blueprints/
+│   │   ├── api.py              # ALL JSON API endpoints
+│   │   ├── dashboard.py        # GET / — KPIs
+│   │   ├── leads.py            # GET /leads, /leads/<slug>
+│   │   ├── pipeline.py         # GET /pipeline — live agent monitor + SSE stream
+│   │   ├── drafts.py           # GET /drafts — email drafts + compose
+│   │   ├── sequences.py        # GET /sequences
+│   │   ├── analytics.py        # GET /analytics
+│   │   └── settings.py         # GET /settings
+│   ├── templates/              # Jinja2 HTML
 │   └── static/                 # CSS + JS
-└── .tmp/                       # All intermediate files (scraped data, generated sites, screenshots)
-    ├── pipeline-data/          # Local JSON storage for operational data
-    │   ├── pipeline_runs.json
-    │   ├── emails.json
-    │   ├── email_sequences.json
-    │   ├── spec_sites.json
-    │   ├── replies.json
-    │   └── activity_log.json
-    └── {slug}/                 # Per-lead working directory
-        ├── website_data.json
-        ├── reviews_data.json
-        ├── analysis.json
-        ├── research.json
-        ├── index.html          # Generated spec site
-        ├── old-site.png/jpg    # Screenshot of their current website
-        ├── new-site.png/jpg    # Screenshot of the generated spec site
-        ├── deploy-info.json    # Netlify deploy URL
-        ├── outreach-email.html # First touch email HTML
-        ├── email-meta.json     # Subject, to, attachments
-        └── followup-touch{2,3,4}.html + meta
+└── .tmp/{slug}/                # Per-lead working directory (research, HTML, screenshots)
 ```
 
 ---
 
-## Data Layer (IMPORTANT)
+## Data Layer
 
-**The file is called `supabase_client.py` but it does NOT use Supabase.** We replaced Supabase with:
+**Database:** Supabase (Postgres) — accessed via `supabase-py` REST client.
 
-- **Leads** → Google Sheets (read via `gspread`, write-back status updates to specific cells)
-- **Operational data** → Local JSON files in `.tmp/pipeline-data/`
+**Tables (9):**
+| Table | Purpose |
+|-------|---------|
+| `leads` | Lead profiles, tier, score, pipeline_status |
+| `pipeline_runs` | Per-run status, agent states (JSONB), logs, timestamps |
+| `spec_sites` | Deploy URL, judge_score, HTML content |
+| `emails` | Subject, body, recipient, touchpoint, status, sender_account |
+| `email_sequences` | Per-lead sequence status, current touchpoint, next_send_date, sender_account |
+| `replies` | Inbound replies, sentiment classification |
+| `auto_replies` | AI-drafted reply management |
+| `activity_log` | Event timeline for all pipeline + email activity |
+| `daily_queue` | Daily send queue items |
 
-### Google Sheet
-- **URL:** `https://docs.google.com/spreadsheets/d/1rmxqViBWof7Jo2yX9AEBFTATzuzF_crqh5HxG2z-1b4/edit`
-- **479 leads:** 83 hot, 184 warm, 212 unscored
-- **47 columns** including: first_name, last_name, email, phone, company_name, website, city, state, lead_score, lead_tier, send_status, is_qualified_hvac, score_breakdown, etc.
-- **Caching:** In-memory cache with 60-second TTL. Invalidated on any write.
-- **Auth:** Uses `token.json` (Google OAuth) in workspace root.
-
-### Data Mapping
-- Sheet's `send_status` → app's `pipeline_status` (""→"pending", "sent"→"emailing", etc.)
-- Sheet's `is_qualified_hvac` → app's `is_qualified` ("yes"/"no" → True/False)
-- Each lead gets a deterministic `id` (UUID5 from slug) and `slug` (slugified company_name)
-
-### JSON Storage
-Each JSON file is an array of objects. IDs are UUID4 strings. Thread-safe via `threading.Lock` per file. Files auto-created as empty `[]` on first access.
+**Env vars:** `SUPABASE_URL`, `SUPABASE_KEY` in `.env`
 
 ---
 
-## Pipeline Runner (pipeline_runner.py)
+## Email System
 
-Runs in a background daemon thread. Steps:
-
-1. **Researcher** — `scrape_website_content.py`, `scrape_google_reviews.py`, `analyze_lead_for_roi.py`, `combine_research.py`, `screenshot_website.py`
-2. **Designer** — `generate_spec_site.py` (Claude via OpenRouter, model: `anthropic/claude-sonnet-4`)
-3. **Judge** — `screenshot_website.py` (new site), programmatic HTML quality score
-4. **Ops** — `deploy_spec_site.py` (Netlify), `generate_outreach_email.py` (Claude Haiku), `create_gmail_draft.py`, `generate_followup_email.py`, create email sequence
-
-Each step calls execution scripts via `subprocess.run()`. Status updates flow through:
-- `supabase_client.py` → updates lead status in Google Sheets + pipeline run state in JSON
-- `sse_manager.py` → broadcasts named SSE events to connected browsers
-
-### SSE Events (Named Events)
-The pipeline runner sends these via `sse.publish()`:
-- `pipeline_started` — data: `{slug, lead}`
-- `agent_update` — data: `{agent, status, task, slug, completed_tasks, ...}`
-- `pipeline_log` — data: `{time, agent, message}`
-- `pipeline_completed` — data: `{slug}`
-- `pipeline_failed` — data: `{slug, error}`
-
-The pipeline.html JS listens via `evtSource.addEventListener('event_name', ...)` — NOT `onmessage`.
+- **Sending:** SMTP via @tedca.online accounts (not Gmail API)
+- **Sender rotation:** Round-robin across accounts, max sends per day per account
+- **Sequences:** 4-touch with configurable delays (3, 4, 7 days)
+- **Inbox:** IMAP polling for replies on @tedca.online accounts
+- **Auto-replies:** AI drafts responses to incoming emails
 
 ---
 
-## Key Execution Scripts
+## What Was Built in Last Session (Feb 20, 2026)
 
-| Script | What it does |
-|---|---|
-| `screenshot_website.py` | Playwright headless screenshot. Uses `wait_until="load"` (not networkidle). Detects maintenance/error/login pages via page content analysis. Writes `.meta.json` sidecar with `{usable, reason}`. device_scale_factor=1 for email-appropriate sizing. |
-| `generate_spec_site.py` | Full HTML spec site via OpenRouter (Claude Sonnet 4). Single API call → self-contained HTML. |
-| `generate_outreach_email.py` | Personalized email via Claude Haiku. Before/after screenshots as CID attachments. Images constrained to `width="600"` with inline styles for email client compatibility. Checks `.meta.json` to skip unusable old-site screenshots. |
-| `generate_followup_email.py` | Generates touches 2-4 with different angles. |
-| `deploy_spec_site.py` | Deploys HTML to Netlify via API. |
-| `create_gmail_draft.py` | Creates Gmail draft with HTML body + CID image attachments. |
-| `scrape_website_content.py` | Scrapes up to 5 pages of a website for content analysis. |
-| `scrape_google_reviews.py` | Scrapes Google Maps reviews for a business. |
-| `read_sheet.py` | Standalone Google Sheets reader (used for testing/one-off reads). |
-| `qualify_and_rank_leads.py` | AI-powered lead scoring and qualification. |
-| `send_gmail_api.py` | Sends Gmail drafts via API. |
+### 1. Compose Email from Drafts Page
+- Compose button + modal on `/drafts` (To, Subject, Sender, Body)
+- `POST /api/emails/compose` creates standalone drafts
+- Auto-links to existing leads by email
 
----
+### 2. Run Specific Lead from Pipeline Page
+- "Run Lead..." search modal with typeahead
+- `GET /api/leads/search?q=...` endpoint
 
-## What Was Built/Fixed in This Session
+### 3. Pipeline Resume / Retry
+- `POST /api/pipeline/resume` resumes failed runs from where they crashed
+- Skips agents already marked "done", preserves `.tmp/` files
+- "Retry from Failure" button on banner + "Retry" on failed rows in Recent Runs
 
-### 1. Replaced Supabase with Google Sheets + Local JSON
-- **7 files modified:** config.py, supabase_client.py (full rewrite), lead_importer.py, settings.py, api.py, settings.html, requirements.txt
-- Removed `supabase` dependency, added `gspread`
-- All 30+ data functions keep identical signatures — blueprints unchanged
-- Added `get_email_by_id()` function to replace direct Supabase client calls in api.py
+### 4. Pipeline State Persistence
+- `/api/pipeline/status` returns `last_run` when no active run (failed/completed)
+- Page reload restores agent cards, completed tasks, log, retry button from Supabase
 
-### 2. Fixed Pipeline SSE Live Updates
-- **Bug:** pipeline.html used `onmessage` which only catches unnamed SSE events. The SSE manager sends named events (`event: agent_update`). UI never received updates.
-- **Fix:** Replaced with `addEventListener` for each named event type (`pipeline_started`, `agent_update`, `pipeline_log`, `pipeline_completed`, `pipeline_failed`)
-- **Added hydration:** On page load, fetches `/api/pipeline/status` and populates agent cards + log from existing run state
-
-### 3. Fixed Screenshot Issues
-- **`device_scale_factor`:** Reduced from 2 to 1 (2880px → 1440px). Email images don't need retina resolution.
-- **`wait_until`:** Changed from `"networkidle"` to `"load"` with fallback to `"domcontentloaded"`. Networkidle hangs on sites with persistent connections.
-- **Page content detection:** After capture, checks for maintenance pages, login walls, error pages (404/503), parked domains. Writes `.meta.json` sidecar.
-- **Email image sizing:** Added `width="600" style="display:block;max-width:100%;width:600px;height:auto;"` inline on all `<img>` tags. Works even when email clients strip `<style>` blocks.
-- **Unusable screenshot skipping:** Pipeline runner and email generator both check `.meta.json` before including old-site screenshots. Maintenance/error pages are excluded from emails.
+### 5. Schema Fix
+- `email_sequences.sender_account` column was missing — caused pipelines to crash at OPS finish
+- Fixed via `ALTER TABLE` in Supabase SQL Editor
+- Added try/catch fallback in pipeline_runner.py
+- Updated schema.sql with all missing columns
 
 ---
 
@@ -183,29 +130,43 @@ python3 app.py
 # → http://localhost:5050
 ```
 
-**Prerequisites:**
-- `token.json` in workspace root (Google OAuth — run `execution/read_sheet.py` to authenticate)
-- `gmail_token.json` + `gmail_credentials.json` for Gmail drafts
-- `.env` with: `OPENROUTER_API_KEY`, `NETLIFY_AUTH_TOKEN`, `ANTHROPIC_API_KEY`
-- Playwright browsers: `python3 -m playwright install chromium`
-
 ---
 
-## Known Issues / TODO
+## Known Issues / Gaps
 
-1. **Pipeline run state can get orphaned** — If the app is killed while a pipeline is running, the JSON state shows "running" forever. Need a cleanup/recovery mechanism.
-2. **Google Sheets rate limits** — 60 reads/min. The cache helps but heavy pipeline activity could hit limits. Consider batching write-backs.
-3. **Palette rotation for spec sites** — The directive says to vary colors per lead, but it's only using modulo on completed run count. Each batch might look similar.
-4. **`supabase_client.py` should be renamed** — It's confusing. Should be `data_client.py` or `db.py`. All imports reference it as `from services import supabase_client as db`.
+1. **Email open/click/bounce tracking** — `open_count` column exists but never updates. No tracking pixel.
+2. **Spec site analytics** — No way to know if leads visit deployed sites.
+3. **`.env` line 35** — `password for email=...` causes python-dotenv parse warning. Harmless but noisy.
+4. **Error details** — Pipeline failures log generically; stack traces only in `log-processes/errors.log`.
 
 ---
 
 ## GitHub Repo
 
 `https://github.com/trdteddarwin-eng/Website-Sender-Directive-.git`
+Branch: `main`, last commit: `9820e48`
 
 ---
 
-## Error Log
+## Prompt for New Claude Session
 
-Check `CLAUDE.md` for the full error log — it's a running list of mistakes and permanent rules. Always scan it before starting any task.
+Copy and paste this:
+
+```
+I'm working on the TedCA Pipeline Dashboard — a Flask app at `pipeline-app/` that automates HVAC lead outreach: research, spec site generation, Netlify deploy, email drafting, and SMTP sending.
+
+Read these files first:
+1. `CLAUDE.md` — Agent instructions, 3-layer architecture, error log
+2. `SESSION_CONTEXT.md` — Full system overview, what was built last session, current state
+
+Key architecture:
+- Data: Supabase (Postgres) via supabase-py. Schema in `pipeline-app/schema.sql`
+- Pipeline: 4 agents (researcher → designer → judge → ops) in `services/pipeline_runner.py`
+- API: All endpoints in `blueprints/api.py`
+- Email: SMTP via @tedca.online accounts, NOT Gmail API
+- Frontend: Jinja2 templates + vanilla JS, SSE for live updates
+
+Last session (Feb 20) we added: compose emails from drafts page, run specific leads via search modal, resume/retry failed pipeline runs, pipeline state persistence across page reloads, and fixed a missing `sender_account` column on `email_sequences` that crashed every pipeline at the OPS step.
+
+The app runs on localhost:5050. Git repo: github.com/trdteddarwin-eng/Website-Sender-Directive- (main branch).
+```
