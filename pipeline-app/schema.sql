@@ -78,6 +78,9 @@ CREATE TABLE IF NOT EXISTS spec_sites (
     deployed_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Add columns that may be missing on existing spec_sites table
+ALTER TABLE spec_sites ADD COLUMN IF NOT EXISTS html_content TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_spec_sites_lead ON spec_sites(lead_id);
 
 -- 4. emails
@@ -102,6 +105,11 @@ CREATE TABLE IF NOT EXISTS emails (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Add columns that may be missing on existing emails table
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS sender_account TEXT;
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS to_email TEXT;
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS sent_via TEXT DEFAULT 'smtp';
+
 CREATE INDEX IF NOT EXISTS idx_emails_lead ON emails(lead_id);
 CREATE INDEX IF NOT EXISTS idx_emails_status ON emails(status);
 CREATE INDEX IF NOT EXISTS idx_emails_touchpoint ON emails(touchpoint);
@@ -120,6 +128,9 @@ CREATE TABLE IF NOT EXISTS email_sequences (
     completed_at TIMESTAMPTZ,
     stopped_at TIMESTAMPTZ
 );
+
+-- Add columns that may be missing on existing email_sequences table
+ALTER TABLE email_sequences ADD COLUMN IF NOT EXISTS sender_account TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_sequences_status ON email_sequences(status);
 CREATE INDEX IF NOT EXISTS idx_sequences_next ON email_sequences(next_send_date);

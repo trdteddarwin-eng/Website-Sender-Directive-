@@ -584,48 +584,63 @@
     .catch(err => showToast('Error: ' + err.message, 'error'));
   }
 
-  /* ── Hydrate from active run on page load ── */
-  (function hydrateFromActiveRun() {
+  /* ── Hydrate from active or last run on page load ── */
+  function hydrateRun(run, lead) {
+    if (!run) return;
+    var slug = run.slug || '';
+    currentRunId = run.id;
+
+    // Show banner
+    startRun(slug, { lead: lead, run_id: run.id });
+
+    // If already finished, update banner state
+    if (run.status === 'failed') {
+      endRun(slug, { run_id: run.id, error: 'See log for details' }, true);
+    } else if (run.status === 'completed') {
+      endRun(slug, { run_id: run.id }, false);
+      showPreview(slug);
+    }
+
+    // Hydrate each agent
+    ['researcher', 'designer', 'judge', 'ops'].forEach(function(agent) {
+      var info = (run.agents || {})[agent];
+      if (!info) return;
+      if (info.status === 'done') {
+        setAgentState(agent, 'done', 'Complete');
+      } else if (info.status === 'working') {
+        setAgentState(agent, 'working', info.task || 'Working...');
+        if (run.status === 'running') startAgentTimer(agent);
+      }
+      if (info.completed_tasks && info.completed_tasks.length > 0) {
+        var el = document.getElementById('agent-' + agent + '-completed');
+        if (el) {
+          el.innerHTML = '';
+          info.completed_tasks.forEach(function(t) {
+            var item = document.createElement('div');
+            item.className = 'completed-item';
+            item.textContent = t;
+            el.appendChild(item);
+          });
+        }
+      }
+    });
+
+    // Hydrate log entries
+    if (run.log) {
+      run.log.forEach(function(entry) {
+        addLog(entry.agent || 'system', entry.message || '');
+      });
+    }
+  }
+
+  (function hydrateOnLoad() {
     fetch('/api/pipeline/status')
       .then(r => r.json())
       .then(data => {
-        if (!data.active || !data.run) return;
-        const run = data.run;
-        const slug = run.slug || '';
-        const lead = data.lead;
-        currentRunId = run.id;
-
-        startRun(slug, { lead: lead, run_id: run.id });
-
-        // Hydrate each agent
-        ['researcher', 'designer', 'judge', 'ops'].forEach(function(agent) {
-          const info = (run.agents || {})[agent];
-          if (!info) return;
-          if (info.status === 'done') {
-            setAgentState(agent, 'done', 'Complete');
-          } else if (info.status === 'working') {
-            setAgentState(agent, 'working', info.task || 'Working...');
-            startAgentTimer(agent);
-          }
-          if (info.completed_tasks && info.completed_tasks.length > 0) {
-            const el = document.getElementById('agent-' + agent + '-completed');
-            if (el) {
-              el.innerHTML = '';
-              info.completed_tasks.forEach(function(t) {
-                const item = document.createElement('div');
-                item.className = 'completed-item';
-                item.textContent = t;
-                el.appendChild(item);
-              });
-            }
-          }
-        });
-
-        // Hydrate log entries
-        if (run.log) {
-          run.log.forEach(function(entry) {
-            addLog(entry.agent || 'system', entry.message || '');
-          });
+        if (data.active && data.run) {
+          hydrateRun(data.run, data.lead);
+        } else if (data.last_run) {
+          hydrateRun(data.last_run, data.lead);
         }
       })
       .catch(function() {});

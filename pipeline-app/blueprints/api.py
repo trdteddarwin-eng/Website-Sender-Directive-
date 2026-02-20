@@ -74,19 +74,27 @@ def run_batch():
 
 @api_bp.route("/api/pipeline/status")
 def pipeline_status():
-    """Get current pipeline run status."""
+    """Get current pipeline run status (active or most recent)."""
     try:
         run = db.get_active_pipeline_run()
     except Exception:
         return jsonify({"active": False, "error": "Data source not configured"})
-    if not run:
-        return jsonify({"active": False})
-    lead = db.get_lead_by_id(run.get("lead_id")) if run.get("lead_id") else None
-    return jsonify({
-        "active": True,
-        "run": run,
-        "lead": lead,
-    })
+
+    if run:
+        lead = db.get_lead_by_id(run.get("lead_id")) if run.get("lead_id") else None
+        return jsonify({"active": True, "run": run, "lead": lead})
+
+    # No active run — return most recent run so UI can show last state
+    try:
+        recent = db.get_recent_pipeline_runs(limit=1)
+        if recent:
+            last_run = recent[0]
+            lead = db.get_lead_by_id(last_run.get("lead_id")) if last_run.get("lead_id") else None
+            return jsonify({"active": False, "last_run": last_run, "lead": lead})
+    except Exception:
+        pass
+
+    return jsonify({"active": False})
 
 
 # ── Leads ──────────────────────────────────────────────
