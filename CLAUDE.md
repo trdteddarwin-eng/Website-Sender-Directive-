@@ -66,6 +66,8 @@ Errors are learning opportunities. When something breaks:
 - `.tmp/` - All intermediate files (dossiers, scraped data, temp exports). Never commit, always regenerated.
 - `execution/` - Python scripts (the deterministic tools)
 - `directives/` - SOPs in Markdown (the instruction set)
+- `Example of Upwork Job/` - User-approved Upwork job examples (reference guide for auto-apply pipeline). **Read before every pipeline run.**
+- `upwork-auto-apply/` - Upwork auto-apply pipeline (see `directives/upwork_auto_apply.md`)
 - `.env` - Environment variables and API keys
 - `credentials.json`, `token.json` - Google OAuth credentials (required files, in `.gitignore`)
 
@@ -95,6 +97,26 @@ The system supports event-driven execution via Modal webhooks. Each webhook maps
 **Available tools for webhooks:** `send_email`, `read_sheet`, `update_sheet`
 
 **All webhook activity streams to Slack in real-time.**
+
+## Upwork Auto-Apply — Job Reference Folder
+
+**MANDATORY: Before every Upwork auto-apply pipeline run, read `Example of Upwork Job/`.**
+
+This folder is the user's curated reference of approved Upwork jobs. It defines their taste, capabilities, and preferences. Every file in it is a job the user explicitly said "yes, let's do this" to.
+
+**How to use it:**
+
+1. **Before scoring (Phase 2):** Read all files in `Example of Upwork Job/` to understand what jobs the user likes — budget ranges, job types, skill requirements, client profiles. Use this to calibrate the AI classifier's relevance scoring. Jobs that match the patterns in this folder should score higher.
+
+2. **Before applying (Phase 5):** Cross-reference scraped job URLs against this folder. If a job is already here, skip it (already applied or tracked).
+
+3. **When user approves a job:** Any time the user says "yes", "let's do this", "apply to this one", or otherwise approves an Upwork job — **immediately add it to `Example of Upwork Job/`** as a markdown file named `YYYY-MM-DD_short-job-title.md`. Include: title, URL, budget, type, skills, description, and why it was a good fit.
+
+4. **Pattern recognition:** Over time this folder builds a profile. Use it to answer: "What does a good job look like for this user?" If a scraped job is similar to 3+ examples in the folder, it's almost certainly a good fit. If it doesn't resemble anything in the folder, score it lower.
+
+**File format:** See `Example of Upwork Job/README.md` for the template.
+
+**Rule:** Never skip reading this folder before a pipeline run. It is the single source of truth for job preferences.
 
 ## Summary
 
@@ -221,3 +243,21 @@ Also, use Opus-4.5 for everything while building. It came out a few days ago and
 - **Why:** Both the subprocess timeout in `pipeline_runner.py` and the HTTP request timeout in `generate_spec_site.py` were set to exactly 120s. They race each other, and the subprocess kill fires before the script can catch its own timeout and print a useful error.
 - **Fix:** Rewrote `generate_spec_site.py` to split the site into 3 parallel API calls (top/middle/bottom sections, ~5K tokens each) instead of 1 monolithic 16K-token call. Each call has 180s timeout with 1 retry. CSS framework is Python-generated (deterministic). Subprocess timeout stays at 480s. Total wall time drops from 5-8 min to ~60-90s.
 - **Rule:** Never ask kimi-k2.5 (or similar slow models) for >6K output tokens in a single call. Split large generations into parallel sections with a shared CSS framework. Each section gets its own API call with its own timeout and retry. Deterministic parts (CSS, document structure) should be Python-generated, not LLM-generated.
+
+### [2026-02-23] Apify: 9 runs at $0.15 each = $1.35 blown on one pipeline execution
+- **What happened:** Pipeline looped through 9 keywords, each launching a separate Apify scrape ($0.15/run), fetching 50 random jobs per run, then keyword-filtering locally. 95% of jobs were thrown away.
+- **Why:** `scrape_upwork_jobs()` only passed `limit`/`fromDate`/`toDate`. The actor actually supports `includeKeywords`, `budget`, `vendor.experienceLevel`, and `connectsPrice` for server-side filtering — but the code never used them.
+- **Fix:** Rewrote to send ALL keywords + filters in ONE Apify run. Server-side filtering returns only relevant jobs. Cost: ~$0.15 total vs $1.35.
+- **Rule:** **Apify budget: $0.50 max per pipeline run.** Always use server-side `includeKeywords` and `budget` filters — never scrape generically then filter locally. One run with all keywords, not N runs with one keyword each.
+
+### [2026-02-23] Python 3.9: `dict | None` type hints crash on import
+- **What happened:** `flowchart_generator.py`, `applier.py`, `session_manager.py` all used `-> dict | None` type hints which crash Python 3.9 with `TypeError: unsupported operand type(s) for |`
+- **Why:** PEP 604 union syntax (`X | Y`) requires Python 3.10+. This Mac runs Python 3.9.
+- **Fix:** Changed all `X | None` to `Optional[X]` from `typing` module.
+- **Rule:** Always use `Optional[X]` instead of `X | None` for type hints. Target Python 3.9 compatibility.
+
+### [2026-02-23] Anthropic API key in .env is a placeholder
+- **What happened:** Classifier returned 401 auth errors for all jobs.
+- **Why:** `.env` line 5 contains `ANTHROPIC_API_KEY=PASTE_YOUR_ANTHROPIC_API_KEY_HERE` — a literal placeholder, not a real key.
+- **Fix:** Switched classifier to use OpenRouter API (key is valid). Updated `classifier.py` to use `requests` + OpenRouter instead of `anthropic` SDK.
+- **Rule:** All AI scoring/classification uses OpenRouter (`OPENROUTER_API_KEY`), not the Anthropic SDK directly. This avoids the missing Anthropic key issue.

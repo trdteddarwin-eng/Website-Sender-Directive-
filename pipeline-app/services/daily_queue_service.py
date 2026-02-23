@@ -9,8 +9,10 @@ from services import supabase_client as db
 from services.smtp_sender import get_sender_accounts, get_next_sender, send_email_smtp
 
 
-def generate_daily_queue(count=6):
+def generate_daily_queue(count=None):
     """Pick top N hot leads with draft touch-1 emails, assign senders round-robin.
+
+    Respects DAILY_SEND_LIMIT — only queues up to (limit - already_sent_today) emails.
 
     Selection priority:
     1. Leads with tier='hot' and pipeline_status='completed'
@@ -20,9 +22,33 @@ def generate_daily_queue(count=6):
 
     Returns list of queued items.
     """
+    from config import DAILY_SEND_LIMIT
+    from services.smtp_sender import get_total_sends_today
+
     today = date.today().isoformat()
+
+    # How many can we still send today?
+    already_sent = get_total_sends_today()
+    remaining = DAILY_SEND_LIMIT - already_sent
+    if remaining <= 0:
+        print(f"[Queue] Daily cap already reached ({already_sent}/{DAILY_SEND_LIMIT})")
+        return []
+
+    # Override count with remaining capacity if count exceeds it
+    if count is None:
+        count = remaining
+    else:
+        count = min(count, remaining)
+
     existing_queue = db.get_todays_queue()
     already_queued_lead_ids = {item["lead_id"] for item in existing_queue}
+
+    # Also subtract already-queued (not yet sent) from capacity
+    queued_pending = sum(1 for item in existing_queue if item.get("status") == "queued")
+    count = max(0, count - queued_pending)
+    if count == 0:
+        print(f"[Queue] Already have {queued_pending} queued + {already_sent} sent = at capacity")
+        return []
 
     # Get draft touch-1 emails
     draft_emails = db.get_draft_emails(limit=200)
@@ -86,16 +112,27 @@ def get_todays_queue():
 def approve_and_send_all():
     """Send all 'queued' items in today's queue via SMTP.
 
-    Returns {sent: N, failed: N, errors: [...]}
+    Stops when global daily cap is reached.
+    Returns {sent: N, failed: N, skipped: N, errors: [...]}
     """
+    from config import DAILY_SEND_LIMIT
+    from services.smtp_sender import get_total_sends_today
+
     items = db.get_todays_queue()
     queued = [i for i in items if i.get("status") == "queued"]
 
     sent = 0
     failed = 0
+    skipped = 0
     errors = []
 
     for item in queued:
+        # Check cap before each send
+        if get_total_sends_today() >= DAILY_SEND_LIMIT:
+            skipped += len(queued) - sent - failed
+            print(f"[Queue] Daily cap hit ({DAILY_SEND_LIMIT}). {skipped} remaining emails skipped.")
+            break
+
         result = _send_queue_item(item)
         if result["success"]:
             sent += 1
@@ -103,7 +140,7 @@ def approve_and_send_all():
             failed += 1
             errors.append({"queue_id": item["id"], "error": result["error"]})
 
-    return {"sent": sent, "failed": failed, "errors": errors}
+    return {"sent": sent, "failed": failed, "skipped": skipped, "errors": errors}
 
 
 def approve_and_send_one(queue_id):

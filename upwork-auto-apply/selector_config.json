@@ -1,0 +1,17 @@
+{
+  "apply_page": {
+    "cover_letter_textarea": "textarea[aria-labelledby*='cover_letter'], textarea[data-test='cover-letter-area'], #cover_letter",
+    "hourly_rate_input": "input[aria-label*='hourly rate'], input[data-test='rate-input'], input[name='rate']",
+    "fixed_price_input": "input[aria-label*='bid'], input[data-test='bid-input']",
+    "boost_toggle": "button[data-test='boost-toggle'], input[type='checkbox'][aria-label*='boost'], .boost-toggle",
+    "boost_off_option": "[data-test='boost-none'], [aria-label*='No boost']",
+    "submit_button": "button[data-test='submit-proposal'], button[type='submit']:has-text('Submit'), button:has-text('Submit a Proposal')",
+    "success_indicator": "[data-test='proposal-submitted'], .success-message, :has-text('Your proposal was submitted')",
+    "connects_cost_display": "[data-test='connects-cost'], .connects-required, :has-text('Connects')",
+    "error_message": "[data-test='error-message'], .error-banner, [role='alert']"
+  },
+  "login_check": {
+    "logged_in_indicator": "[data-test='user-menu'], .nav-user-menu, .user-avatar",
+    "login_redirect": "/ab/account-security/login"
+  }
+}

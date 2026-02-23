@@ -1,0 +1,124 @@
+2026-02-19 18:21:51,012 | ERROR | Pipeline failed for magnum-air: 'str' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 113, in run
+    self._run_researcher()
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 135, in _run_researcher
+    self._update_agent("researcher", "working", "Scraping website")
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 81, in _update_agent
+    agent_data = agents.get(agent, {})
+AttributeError: 'str' object has no attribute 'get'
+2026-02-19 18:22:29,220 | ERROR | Pipeline failed for murphy-heating-ac-inc-and-bexar-air-inc: 'str' object has no attribute 'get'
+Traceback (most recent call last):
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 113, in run
+    self._run_researcher()
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 135, in _run_researcher
+    self._update_agent("researcher", "working", "Scraping website")
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 81, in _update_agent
+    agent_data = agents.get(agent, {})
+AttributeError: 'str' object has no attribute 'get'
+2026-02-19 18:26:45,988 | ERROR | Pipeline failed for murphy-heating-ac-inc-and-bexar-air-inc: {'message': "Could not find the 'judge_struct_score' column of 'pipeline_runs' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 117, in run
+    self._run_judge()
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 314, in _run_judge
+    db.update_pipeline_run(self.run_id, {
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/supabase_client.py", line 263, in update_pipeline_run
+    result = sb.table("pipeline_runs").update(updates).eq("id", run_id).execute()
+  File "/Users/yoljean/Library/Python/3.9/lib/python/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the 'judge_struct_score' column of 'pipeline_runs' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-02-19 18:32:07,566 | ERROR | Script analyze_lead_for_roi.py exited 1 for murphy-heating-ac-inc-and-bexar-air-inc: python-dotenv could not parse statement starting at line 35
+
+2026-02-19 18:33:08,469 | ERROR | Script screenshot_website.py timed out after 60s for murphy-heating-ac-inc-and-bexar-air-inc
+2026-02-19 18:35:09,706 | ERROR | Script generate_spec_site.py timed out after 120s for murphy-heating-ac-inc-and-bexar-air-inc
+2026-02-19 18:35:09,848 | ERROR | Pipeline failed for murphy-heating-ac-inc-and-bexar-air-inc: Spec site generation failed: Timeout after 120s
+Traceback (most recent call last):
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 120, in run
+    self._run_designer()
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 246, in _run_designer
+    raise RuntimeError(f"Spec site generation failed: {err[:200]}")
+RuntimeError: Spec site generation failed: Timeout after 120s
+2026-02-19 18:49:43,633 | ERROR | Script generate_spec_site.py timed out after 300s for d-spain-sales-service
+2026-02-19 18:49:43,893 | ERROR | Pipeline failed for d-spain-sales-service: Spec site generation failed: Timeout after 300s
+Traceback (most recent call last):
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 120, in run
+    self._run_designer()
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 246, in _run_designer
+    raise RuntimeError(f"Spec site generation failed: {err[:200]}")
+RuntimeError: Spec site generation failed: Timeout after 300s
+2026-02-19 18:58:33,717 | ERROR | Script generate_spec_site.py timed out after 300s for gregory-edwards
+2026-02-19 18:58:33,981 | ERROR | Pipeline failed for gregory-edwards: Spec site generation failed: Timeout after 300s
+Traceback (most recent call last):
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 120, in run
+    self._run_designer()
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 246, in _run_designer
+    raise RuntimeError(f"Spec site generation failed: {err[:200]}")
+RuntimeError: Spec site generation failed: Timeout after 300s
+2026-02-19 19:00:08,420 | ERROR | Script analyze_lead_for_roi.py exited 1 for united-mechanical: python-dotenv could not parse statement starting at line 35
+
+2026-02-19 19:26:39,977 | ERROR | Script generate_spec_site.py timed out after 300s for atmac-mechanical-services
+2026-02-19 19:26:40,115 | ERROR | Pipeline failed for atmac-mechanical-services: Spec site generation failed: Timeout after 300s
+Traceback (most recent call last):
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 120, in run
+    self._run_designer()
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 246, in _run_designer
+    raise RuntimeError(f"Spec site generation failed: {err[:200]}")
+RuntimeError: Spec site generation failed: Timeout after 300s
+2026-02-19 19:36:07,747 | ERROR | Script generate_spec_site.py exited 1 for harold-james: /Users/yoljean/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+python-dotenv could not parse statement starting at line 35
+Error: Generated HTML is missing basic structure
+
+2026-02-19 19:36:08,250 | ERROR | Pipeline failed for harold-james: Spec site generation failed: /Users/yoljean/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8
+Traceback (most recent call last):
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 120, in run
+    self._run_designer()
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 246, in _run_designer
+    raise RuntimeError(f"Spec site generation failed: {err[:200]}")
+RuntimeError: Spec site generation failed: /Users/yoljean/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8
+2026-02-19 19:47:54,590 | ERROR | Script generate_spec_site.py timed out after 480s for envirotech-mechanical-systems-llc
+2026-02-19 19:47:54,781 | ERROR | Pipeline failed for envirotech-mechanical-systems-llc: Spec site generation failed: Timeout after 480s
+Traceback (most recent call last):
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 120, in run
+    self._run_designer()
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 246, in _run_designer
+    raise RuntimeError(f"Spec site generation failed: {err[:200]}")
+RuntimeError: Spec site generation failed: Timeout after 480s
+2026-02-19 20:23:58,774 | ERROR | Script analyze_lead_for_roi.py exited 1 for a-w-mechanical-services: python-dotenv could not parse statement starting at line 35
+
+2026-02-20 01:39:59,443 | ERROR | Pipeline failed for raven-mechanical: {'message': 'column emails.sender_account does not exist', 'code': '42703', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 122, in run
+    self._run_ops()
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 459, in _run_ops
+    sender_acc = get_next_sender()
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/smtp_sender.py", line 49, in get_next_sender
+    send_counts = db.get_sends_per_sender_today(today)
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/supabase_client.py", line 669, in get_sends_per_sender_today
+    sb.table("emails")
+  File "/Users/yoljean/Library/Python/3.9/lib/python/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'column emails.sender_account does not exist', 'code': '42703', 'hint': None, 'details': None}
+2026-02-20 07:40:33,935 | ERROR | Script scrape_google_reviews.py timed out after 90s for blackall-mechanical
+2026-02-20 07:46:44,505 | ERROR | Pipeline failed for blackall-mechanical: {'message': "Could not find the 'sender_account' column of 'email_sequences' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 122, in run
+    self._run_ops()
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 549, in _run_ops
+    db.create_sequence(seq_data)
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/supabase_client.py", line 405, in create_sequence
+    if slug:
+  File "/Users/yoljean/Library/Python/3.9/lib/python/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the 'sender_account' column of 'email_sequences' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+2026-02-20 08:04:06,188 | ERROR | Pipeline failed for norrell: {'message': "Could not find the 'sender_account' column of 'email_sequences' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}
+Traceback (most recent call last):
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 122, in run
+    done_agents.add(agent_name)
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/pipeline_runner.py", line 549, in _run_ops
+    with open(meta_path) as f:
+  File "/Users/yoljean/Downloads/Ted Workspace/pipeline-app/services/supabase_client.py", line 405, in create_sequence
+    if slug:
+  File "/Users/yoljean/Library/Python/3.9/lib/python/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the 'sender_account' column of 'email_sequences' in the schema cache", 'code': 'PGRST204', 'hint': None, 'details': None}

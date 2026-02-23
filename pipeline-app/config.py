@@ -45,3 +45,6 @@ PALETTES = [
 ]
 
 HERO_STYLES = ["full-bleed", "split-layout", "gradient-overlay", "diagonal-split"]
+
+# Email sending — daily cap across all sender accounts
+DAILY_SEND_LIMIT = 5

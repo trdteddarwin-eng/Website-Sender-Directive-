@@ -1,5 +1,33 @@
 {% extends "base.html" %}
 {% block title %}Drafts — TedCA Pipeline{% endblock %}
+
+{% block head %}
+<style>
+  .email-tabs { display: flex; gap: 0; margin-bottom: 0; }
+  .email-tab {
+    padding: 6px 16px; font-size: 13px; font-weight: 500; cursor: pointer;
+    background: transparent; border: 1px solid var(--card-border); border-bottom: none;
+    color: var(--text-dim); border-radius: 6px 6px 0 0; transition: all .15s;
+  }
+  .email-tab.active { background: #fff; color: var(--text); border-bottom: 1px solid #fff; margin-bottom: -1px; z-index: 1; }
+  .email-tab:not(.active):hover { background: rgba(0,0,0,.03); }
+  .email-preview-frame {
+    width: 100%; min-height: 360px; border: 1px solid var(--card-border);
+    border-radius: 0 6px 6px 6px; background: #fff;
+  }
+  .email-code-area {
+    width: 100%; min-height: 360px; resize: vertical;
+    font-family: var(--mono); font-size: 12px; line-height: 1.5;
+    border: 1px solid var(--card-border); border-radius: 0 6px 6px 6px;
+    padding: 12px; background: #1a1a2e; color: #e0e0e0;
+  }
+  .queue-preview-frame {
+    width: 100%; height: 120px; border: none; border-radius: 6px;
+    background: #fff; pointer-events: none;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-header">
   <div>
@@ -44,9 +72,9 @@
       </div>
 
       {% if item.email and item.email.html_content %}
-      <div style="background: #fff; border-radius: 6px; padding: 12px; max-height: 120px; overflow: hidden; margin-bottom: 12px; position: relative; font-size: 13px;">
-        {{ item.email.html_content|safe|truncate(300) }}
-        <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 40px; background: linear-gradient(transparent, #fff);"></div>
+      <div style="border-radius: 6px; overflow: hidden; margin-bottom: 12px; position: relative;">
+        <iframe class="queue-preview-frame" srcdoc="{{ item.email.html_content|e }}"></iframe>
+        <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 30px; background: linear-gradient(transparent, #fff);"></div>
       </div>
       {% endif %}
 
@@ -125,6 +153,7 @@
           <td><span class="text-dim text-sm">{{ d.created_at[:10] if d.created_at else '—' }}</span></td>
           <td>
             <div class="flex gap-2">
+              <button class="btn btn-sm btn-ghost" onclick="previewDraftEmail('{{ d.id }}')">Preview</button>
               <button class="btn btn-sm btn-ghost" onclick="editQueueEmail('{{ d.id }}')">Edit</button>
               <button class="btn btn-sm btn-primary" onclick="sendDraftEmail('{{ d.id }}')">Send</button>
               <button class="btn btn-sm btn-danger" onclick="skipDraftEmail('{{ d.id }}')">Skip</button>
@@ -144,7 +173,7 @@
 
 <!-- Compose Modal -->
 <div class="modal-overlay" id="compose-modal" onclick="if(event.target===this) this.classList.remove('active')">
-  <div class="modal" style="max-width: 700px;">
+  <div class="modal" style="max-width: 760px;">
     <div class="modal-title">
       <span>Compose Email</span>
       <button class="modal-close" onclick="document.getElementById('compose-modal').classList.remove('active')">&times;</button>
@@ -166,8 +195,16 @@
       </select>
     </div>
     <div style="margin:12px 0;">
-      <label class="text-dim text-sm" style="display:block;margin-bottom:4px;">Body (HTML)</label>
-      <textarea id="compose-body" class="search-input" style="width:100%;min-height:300px;resize:vertical;font-family:var(--mono);font-size:12px;" placeholder="Write your email here..."></textarea>
+      <div class="email-tabs">
+        <button class="email-tab active" onclick="switchTab('compose','visual',this)">Visual</button>
+        <button class="email-tab" onclick="switchTab('compose','code',this)">Code</button>
+      </div>
+      <div id="compose-pane-visual">
+        <iframe id="compose-preview" class="email-preview-frame" sandbox="allow-same-origin"></iframe>
+      </div>
+      <div id="compose-pane-code" style="display:none;">
+        <textarea id="compose-body" class="email-code-area" placeholder="Write your email HTML here..."></textarea>
+      </div>
     </div>
     <div class="flex gap-2" style="justify-content:flex-end;margin-top:8px;">
       <button class="btn btn-ghost" onclick="saveCompose()">Save Draft</button>
@@ -178,9 +215,9 @@
 
 <!-- Email Edit Modal -->
 <div class="modal-overlay" id="edit-email-modal" onclick="if(event.target===this) this.classList.remove('active')">
-  <div class="modal" style="max-width: 700px;">
+  <div class="modal" style="max-width: 760px;">
     <div class="modal-title">
-      <span>Edit Email</span>
+      <span id="edit-modal-title">Edit Email</span>
       <button class="modal-close" onclick="document.getElementById('edit-email-modal').classList.remove('active')">&times;</button>
     </div>
     <div id="edit-email-content"></div>
@@ -191,10 +228,44 @@
 
 {% block scripts %}
 <script>
+  /* ── Tab switching ─────────────────────────────────── */
+  function switchTab(prefix, mode, btn) {
+    // Toggle tab buttons
+    btn.parentElement.querySelectorAll('.email-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+
+    const visualPane = document.getElementById(prefix + '-pane-visual');
+    const codePane   = document.getElementById(prefix + '-pane-code');
+    const textarea   = codePane.querySelector('textarea');
+    const iframe     = visualPane.querySelector('iframe');
+
+    if (mode === 'code') {
+      visualPane.style.display = 'none';
+      codePane.style.display = '';
+    } else {
+      // Sync textarea content into iframe before showing visual
+      if (textarea && iframe) {
+        writeToFrame(iframe, textarea.value);
+      }
+      codePane.style.display = 'none';
+      visualPane.style.display = '';
+    }
+  }
+
+  function writeToFrame(iframe, html) {
+    // Use srcdoc for safe sandboxed rendering
+    iframe.srcdoc = html || '<div style="padding:24px;color:#999;font-family:sans-serif;">No content yet</div>';
+  }
+
+  /* ── Compose ───────────────────────────────────────── */
   function openCompose() {
     document.getElementById('compose-to').value = '';
     document.getElementById('compose-subject').value = '';
     document.getElementById('compose-body').value = '';
+    writeToFrame(document.getElementById('compose-preview'), '');
+    // Reset to visual tab
+    var tabs = document.querySelector('#compose-modal .email-tabs');
+    if (tabs) { tabs.children[0].click(); }
     document.getElementById('compose-modal').classList.add('active');
   }
 
@@ -251,6 +322,7 @@
     .catch(err => showToast('Error: ' + err.message, 'error'));
   }
 
+  /* ── Queue actions ─────────────────────────────────── */
   function generateQueue() {
     fetch('/api/queue/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
       .then(r => r.json())
@@ -321,12 +393,46 @@
     .catch(err => showToast('Error: ' + err.message, 'error'));
   }
 
+  /* ── Preview (read-only) ───────────────────────────── */
+  function previewDraftEmail(emailId) {
+    if (!emailId) return;
+    fetch('/api/emails/' + emailId + '/preview')
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) { showToast(data.error, 'error'); return; }
+        var title = document.getElementById('edit-modal-title');
+        title.textContent = 'Preview Email';
+        const container = document.getElementById('edit-email-content');
+        container.innerHTML =
+          '<div style="margin:12px 0;">' +
+            '<div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;">' +
+              '<span class="badge badge-' + (data.status || 'draft') + '">' + (data.status || 'draft') + '</span>' +
+              '<span class="text-dim text-sm">Touch ' + (data.touchpoint || '—') + '</span>' +
+            '</div>' +
+            '<div style="font-weight:600;font-size:16px;margin-bottom:12px;">' + escapeHtml(data.subject || '(no subject)') + '</div>' +
+            '<iframe class="email-preview-frame" sandbox="allow-same-origin" style="min-height:420px;"></iframe>' +
+          '</div>' +
+          '<div class="flex gap-2" style="justify-content:flex-end;margin-top:8px;">' +
+            '<button class="btn btn-ghost" onclick="document.getElementById(\'edit-email-modal\').classList.remove(\'active\'); editQueueEmail(\'' + emailId + '\')">Edit</button>' +
+            '<button class="btn btn-primary" onclick="sendDraftEmail(\'' + emailId + '\')">Send</button>' +
+          '</div>';
+        // Write HTML into the iframe
+        var frame = container.querySelector('iframe');
+        writeToFrame(frame, data.html || '');
+        document.getElementById('edit-email-modal').classList.add('active');
+      })
+      .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  /* ── Edit (visual + code tabs) ─────────────────────── */
   function editQueueEmail(emailId) {
     if (!emailId) return;
     fetch('/api/emails/' + emailId + '/preview')
       .then(r => r.json())
       .then(data => {
         if (data.error) { showToast(data.error, 'error'); return; }
+        var title = document.getElementById('edit-modal-title');
+        title.textContent = 'Edit Email';
         const container = document.getElementById('edit-email-content');
         container.innerHTML =
           '<div style="margin:12px 0;">' +
@@ -336,20 +442,40 @@
           '<div style="margin:12px 0;">' +
             '<label class="text-dim text-sm" style="display:block;margin-bottom:4px;">Sender Account</label>' +
             '<select id="modal-sender" class="search-input" style="width:100%;">' +
-              {% for s in senders %}'<option value="{{ s.email }}">{{ s.display_name }} ({{ s.email }})</option>' +{% endfor %}
+              senderOptionsHtml() +
             '</select>' +
           '</div>' +
           '<div style="margin:12px 0;">' +
-            '<label class="text-dim text-sm" style="display:block;margin-bottom:4px;">Body (HTML)</label>' +
-            '<textarea id="modal-body" class="search-input" style="width:100%;min-height:300px;resize:vertical;font-family:var(--mono);font-size:12px;">' + escapeHtml(data.html || '') + '</textarea>' +
+            '<div class="email-tabs">' +
+              '<button class="email-tab active" onclick="switchTab(\'modal\',\'visual\',this)">Visual</button>' +
+              '<button class="email-tab" onclick="switchTab(\'modal\',\'code\',this)">Code</button>' +
+            '</div>' +
+            '<div id="modal-pane-visual">' +
+              '<iframe id="modal-preview" class="email-preview-frame" sandbox="allow-same-origin"></iframe>' +
+            '</div>' +
+            '<div id="modal-pane-code" style="display:none;">' +
+              '<textarea id="modal-body" class="email-code-area"></textarea>' +
+            '</div>' +
           '</div>' +
           '<div class="flex gap-2" style="justify-content:flex-end;margin-top:8px;">' +
             '<button class="btn btn-ghost" onclick="saveModalDraft(\'' + emailId + '\')">Save Draft</button>' +
             '<button class="btn btn-primary" onclick="saveAndSendModal(\'' + emailId + '\')">Save & Send</button>' +
           '</div>';
+
+        // Populate
+        document.getElementById('modal-body').value = data.html || '';
+        writeToFrame(document.getElementById('modal-preview'), data.html || '');
         document.getElementById('edit-email-modal').classList.add('active');
       })
       .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+
+  function senderOptionsHtml() {
+    var html = '';
+    {% for s in senders %}
+    html += '<option value="{{ s.email }}">{{ s.display_name }} ({{ s.email }})</option>';
+    {% endfor %}
+    return html;
   }
 
   function saveModalDraft(emailId) {
@@ -374,7 +500,6 @@
     const subject = document.getElementById('modal-subject').value;
     const html_content = document.getElementById('modal-body').value;
     const sender = document.getElementById('modal-sender').value;
-    // Save first
     fetch('/api/emails/' + emailId, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -396,6 +521,7 @@
     .catch(err => showToast('Error: ' + err.message, 'error'));
   }
 
+  /* ── Draft actions ─────────────────────────────────── */
   function sendDraftEmail(emailId) {
     if (!confirm('Send this email?')) return;
     fetch('/api/emails/' + emailId + '/send', { method: 'POST' })
@@ -418,6 +544,7 @@
       .catch(err => showToast('Error: ' + err.message, 'error'));
   }
 
+  /* ── Filters ───────────────────────────────────────── */
   function filterDrafts() {
     const touch = document.getElementById('filter-touch').value;
     const sender = document.getElementById('filter-sender').value;
@@ -428,6 +555,7 @@
     });
   }
 
+  /* ── Helpers ───────────────────────────────────────── */
   function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str; return div.innerHTML; }
   function escapeAttr(str) { return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 </script>

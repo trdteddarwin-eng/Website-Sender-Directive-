@@ -1,0 +1,29 @@
+{
+  "keywords": ["automation", "ai agent", "n8n", "gpt", "workflow", "api integration", "voice ai", "ai consultant", "app developer"],
+  "scraper": { "provider": "apify", "limit_per_keyword": 50, "days": 1 },
+  "filters": {
+    "min_fixed_budget": 200,
+    "min_hourly_rate": 15,
+    "max_proposals": 10,
+    "max_connects_cost": 16,
+    "experience_levels": ["intermediate", "expert"]
+  },
+  "scoring": { "model": "anthropic/claude-sonnet-4-5", "min_score": 7 },
+  "proposal": { "model": "claude-opus-4-5-20251101" },
+  "deliverable": {
+    "site_model": "moonshotai/kimi-k2.5",
+    "flowchart_model": "anthropic/claude-opus-4-6",
+    "vercel_team": null
+  },
+  "auto_apply": {
+    "enabled": true,
+    "mode": "full_auto",
+    "daily_application_limit": 15,
+    "daily_connects_budget": 60,
+    "default_hourly_rate": 45,
+    "skip_boost": true,
+    "delay_between_applies_sec": [45, 120]
+  },
+  "schedule": { "cron": "0 */2 14-23 * * 1-5" },
+  "notifications": { "email_on_apply": true, "email_on_error": true, "email_on_session_expired": true }
+}

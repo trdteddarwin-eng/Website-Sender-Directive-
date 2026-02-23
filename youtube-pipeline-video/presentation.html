@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How I Built an AI Video Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0A0A0A;
+    --red: #FF3B3B;
+    --green: #4ADE80;
+    --accent: #FBBF24;
+    --blue: #60A5FA;
+    --text: #F0F0F0;
+    --text-dim: #999;
+    --code-bg: #1a1a2e;
+    --code-border: #333;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---- Slide Container ---- */
+  .deck {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 80px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s ease;
+    z-index: 0;
+  }
+
+  .slide.active {
+    opacity: 1;
+    pointer-events: auto;
+    z-index: 1;
+  }
+
+  /* ---- Slide Counter ---- */
+  #counter {
+    position: fixed;
+    bottom: 28px;
+    right: 36px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: var(--text-dim);
+    z-index: 100;
+    user-select: none;
+  }
+
+  /* ---- Progress Bar ---- */
+  #progress {
+    position: fixed;
+    top: 0; left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--red), var(--accent), var(--green), var(--blue));
+    transition: width 0.35s ease;
+    z-index: 100;
+  }
+
+  /* ---- Typography ---- */
+  .slide h1 {
+    font-size: 56px;
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -1.5px;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .slide h2 {
+    font-size: 44px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -1px;
+    text-align: center;
+    margin-bottom: 24px;
+  }
+
+  .slide h3 {
+    font-size: 32px;
+    font-weight: 600;
+    line-height: 1.3;
+    text-align: center;
+    margin-bottom: 20px;
+  }
+
+  .slide .subtitle {
+    font-size: 24px;
+    font-weight: 300;
+    color: var(--text-dim);
+    text-align: center;
+    margin-bottom: 12px;
+  }
+
+  .slide .small-subtitle {
+    font-size: 20px;
+    font-weight: 300;
+    color: var(--text-dim);
+    text-align: center;
+    font-style: italic;
+  }
+
+  .slide p {
+    font-size: 22px;
+    line-height: 1.6;
+    max-width: 900px;
+    text-align: center;
+  }
+
+  /* ---- Colored text helpers ---- */
+  .red    { color: var(--red); }
+  .green  { color: var(--green); }
+  .accent { color: var(--accent); }
+  .blue   { color: var(--blue); }
+  .dim    { color: var(--text-dim); }
+  .bold   { font-weight: 700; }
+  .mono   { font-family: 'JetBrains Mono', monospace; }
+
+  /* ---- Bullet lists ---- */
+  .bullets {
+    list-style: none;
+    text-align: left;
+    max-width: 800px;
+    width: 100%;
+  }
+
+  .bullets li {
+    font-size: 22px;
+    line-height: 1.6;
+    padding: 8px 0;
+    padding-left: 32px;
+    position: relative;
+  }
+
+  .bullets li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 18px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--blue);
+  }
+
+  .bullets.red-dots li::before   { background: var(--red); }
+  .bullets.green-dots li::before { background: var(--green); }
+  .bullets.accent-dots li::before { background: var(--accent); }
+
+  .bullets li.highlight {
+    font-weight: 700;
+    font-size: 24px;
+    color: var(--accent);
+  }
+
+  .bullets li.highlight::before {
+    background: var(--accent);
+  }
+
+  /* ---- Code Blocks ---- */
+  .code-block {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 12px;
+    padding: 24px 32px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    line-height: 1.6;
+    color: #e0e0e0;
+    overflow-x: auto;
+    text-align: left;
+    max-width: 960px;
+    width: 100%;
+    white-space: pre;
+    tab-size: 2;
+  }
+
+  .code-block.small { font-size: 15px; line-height: 1.5; }
+  .code-block.medium { font-size: 17px; }
+
+  .code-keyword  { color: var(--red); }
+  .code-string   { color: var(--green); }
+  .code-comment  { color: #666; }
+  .code-number   { color: var(--accent); }
+  .code-function { color: var(--blue); }
+  .code-tag      { color: var(--red); }
+  .code-attr     { color: var(--accent); }
+  .code-prop     { color: #c792ea; }
+
+  /* ---- Architecture Boxes ---- */
+  .arch-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 700px;
+    width: 100%;
+  }
+
+  .arch-box {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 24px 32px;
+    border-radius: 16px;
+    font-size: 20px;
+    font-weight: 600;
+    position: relative;
+  }
+
+  .arch-box .arch-emoji {
+    font-size: 32px;
+    flex-shrink: 0;
+  }
+
+  .arch-box .arch-label {
+    font-weight: 700;
+    font-size: 22px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .arch-box .arch-desc {
+    font-weight: 400;
+    font-size: 18px;
+    color: var(--text-dim);
+    margin-left: auto;
+  }
+
+  .arch-box.blue-box   { background: rgba(96,165,250,0.12); border: 1px solid rgba(96,165,250,0.3); }
+  .arch-box.green-box  { background: rgba(74,222,128,0.12); border: 1px solid rgba(74,222,128,0.3); }
+  .arch-box.accent-box { background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.3); }
+
+  .arch-arrow {
+    text-align: center;
+    font-size: 28px;
+    color: var(--text-dim);
+    margin: -8px 0;
+  }
+
+  /* ---- Flowchart (horizontal) ---- */
+  .flow-h {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 1000px;
+  }
+
+  .flow-step {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px;
+    padding: 14px 20px;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+    min-width: 100px;
+  }
+
+  .flow-arrow {
+    font-size: 22px;
+    color: var(--text-dim);
+  }
+
+  /* ---- Table ---- */
+  .scene-table {
+    border-collapse: collapse;
+    max-width: 880px;
+    width: 100%;
+  }
+
+  .scene-table th,
+  .scene-table td {
+    text-align: left;
+    padding: 12px 20px;
+    font-size: 18px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .scene-table th {
+    font-weight: 700;
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    border-bottom: 2px solid rgba(255,255,255,0.15);
+  }
+
+  /* ---- Audio Tracks Visual ---- */
+  .track-visual {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 800px;
+    width: 100%;
+  }
+
+  .track-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .track-label {
+    font-size: 18px;
+    font-weight: 600;
+    min-width: 140px;
+    text-align: right;
+  }
+
+  .track-bar {
+    flex: 1;
+    height: 40px;
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .track-bar .segments {
+    display: flex;
+    height: 100%;
+    gap: 2px;
+  }
+
+  .track-bar .seg {
+    flex: 1;
+    border-radius: 4px;
+    opacity: 0.7;
+  }
+
+  /* ---- Tree diagram ---- */
+  .tree {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 17px;
+    line-height: 1.7;
+    text-align: left;
+    max-width: 800px;
+    width: 100%;
+  }
+
+  .tree .branch { color: var(--text-dim); }
+  .tree .file { color: var(--accent); }
+  .tree .desc { color: var(--text-dim); font-size: 15px; }
+
+  /* ---- Big Stat ---- */
+  .big-stat {
+    font-size: 120px;
+    font-weight: 900;
+    letter-spacing: -4px;
+    line-height: 1;
+    margin-bottom: 16px;
+    background: linear-gradient(135deg, var(--accent), var(--green));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .big-stat.red-grad {
+    background: linear-gradient(135deg, var(--red), var(--accent));
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+
+  /* ---- Hook Arrow ---- */
+  .hook-visual {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .hook-box {
+    background: var(--code-bg);
+    border: 2px solid var(--code-border);
+    border-radius: 16px;
+    padding: 32px 40px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 26px;
+    max-width: 400px;
+    text-align: center;
+  }
+
+  .hook-arrow {
+    font-size: 48px;
+    color: var(--green);
+    animation: pulseArrow 2s ease-in-out infinite;
+  }
+
+  @keyframes pulseArrow {
+    0%, 100% { opacity: 0.5; transform: translateX(0); }
+    50% { opacity: 1; transform: translateX(8px); }
+  }
+
+  .hook-result {
+    background: linear-gradient(135deg, rgba(74,222,128,0.1), rgba(96,165,250,0.1));
+    border: 2px solid rgba(74,222,128,0.3);
+    border-radius: 16px;
+    padding: 32px 40px;
+    text-align: center;
+    max-width: 300px;
+  }
+
+  .hook-result .label {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .hook-result .title {
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  /* ---- Circular Diagram ---- */
+  .loop-diagram {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 24px;
+    max-width: 600px;
+    width: 100%;
+  }
+
+  .loop-step {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 24px;
+    text-align: center;
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+  }
+
+  .loop-step .step-num {
+    font-size: 36px;
+    font-weight: 900;
+    opacity: 0.2;
+    position: absolute;
+    top: 12px;
+    left: 16px;
+  }
+
+  .loop-step .step-icon {
+    font-size: 36px;
+    margin-bottom: 4px;
+  }
+
+  /* ---- Before/After ---- */
+  .before-after {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    max-width: 800px;
+    width: 100%;
+  }
+
+  .ba-row {
+    padding: 20px 28px;
+    border-radius: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    line-height: 1.5;
+    word-break: break-all;
+  }
+
+  .ba-row.before {
+    background: rgba(255,59,59,0.08);
+    border: 1px solid rgba(255,59,59,0.25);
+  }
+
+  .ba-row.after {
+    background: rgba(74,222,128,0.08);
+    border: 1px solid rgba(74,222,128,0.25);
+  }
+
+  .ba-label {
+    font-family: 'Inter', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+
+  /* ---- Graphics Grid ---- */
+  .graphics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    max-width: 800px;
+    width: 100%;
+  }
+
+  .graphic-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 28px;
+    text-align: center;
+  }
+
+  .graphic-card .icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+  }
+
+  .graphic-card .card-title {
+    font-size: 17px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .graphic-card .card-scene {
+    font-size: 14px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ---- Video list ---- */
+  .video-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    max-width: 900px;
+  }
+
+  .video-tag {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 16px;
+    font-weight: 500;
+  }
+
+  /* ---- Fade-in helper for inner elements ---- */
+  .slide.active .fade-up {
+    animation: fadeUp 0.5s ease forwards;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ---- Nav hint ---- */
+  #nav-hint {
+    position: fixed;
+    bottom: 28px;
+    left: 36px;
+    font-size: 13px;
+    color: rgba(255,255,255,0.2);
+    z-index: 100;
+    user-select: none;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ---- Pipeline flow with times ---- */
+  .pipeline-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 800px;
+    width: 100%;
+  }
+
+  .pipeline-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .pipeline-step-box {
+    flex: 1;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 14px 20px;
+    font-weight: 600;
+    font-size: 18px;
+  }
+
+  .pipeline-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: var(--accent);
+    min-width: 80px;
+    text-align: right;
+  }
+
+  /* ---- Outro links ---- */
+  .outro-links {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 600px;
+    width: 100%;
+    margin-top: 24px;
+  }
+
+  .outro-link {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 18px 24px;
+    font-size: 20px;
+    font-weight: 500;
+  }
+
+  .outro-link .link-icon {
+    font-size: 28px;
+    flex-shrink: 0;
+  }
+
+  /* ---- Click areas ---- */
+  .click-left, .click-right {
+    position: fixed;
+    top: 0;
+    width: 50%;
+    height: 100%;
+    z-index: 50;
+    cursor: pointer;
+  }
+  .click-left  { left: 0; }
+  .click-right { right: 0; }
+
+  /* Print */
+  @media print {
+    .slide { opacity: 1 !important; position: relative !important; page-break-after: always; pointer-events: auto !important; }
+    #counter, #progress, #nav-hint, .click-left, .click-right { display: none; }
+    html, body { overflow: visible; height: auto; }
+    .deck { height: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+<div id="counter"></div>
+<div id="nav-hint">arrow keys / space / click</div>
+
+<div class="click-left" onclick="prev()"></div>
+<div class="click-right" onclick="next()"></div>
+
+<div class="deck">
+
+<!-- ===== SLIDE 1 : Title ===== -->
+<div class="slide active" data-slide="1">
+  <h1 style="font-size: 52px;">How I Built an <span class="green">AI Video Pipeline</span></h1>
+  <div class="subtitle" style="margin-top:8px; font-size:28px;">with <span class="blue bold">Claude Code</span></div>
+  <div class="small-subtitle" style="margin-top:24px;">"From one sentence to a finished TikTok in 5 minutes"</div>
+</div>
+
+<!-- ===== SLIDE 2 : Hook ===== -->
+<div class="slide" data-slide="2">
+  <div class="hook-visual">
+    <div class="hook-box">
+      <span class="dim" style="font-size:16px; display:block; margin-bottom:8px;">prompt:</span>
+      <span class="code-string">"Make me a video<br>about AI"</span>
+    </div>
+    <div class="hook-arrow">&#10230;</div>
+    <div class="hook-result">
+      <div class="label">output</div>
+      <div style="font-size:48px; margin-bottom:8px;">&#9654;</div>
+      <div class="title">Finished TikTok</div>
+      <div style="font-size:14px; color:var(--text-dim); margin-top:4px;">1080x1920 &bull; 40s &bull; With audio</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SLIDE 3 : The Manual Process ===== -->
+<div class="slide" data-slide="3">
+  <h2>The <span class="red">Old Way</span></h2>
+  <ul class="bullets red-dots" style="margin-top:16px;">
+    <li>&#128337; Write the script &mdash; <span class="dim">30 min</span></li>
+    <li>&#128337; Record voiceover &mdash; <span class="dim">20 min</span></li>
+    <li>&#128337; Find sound effects &mdash; <span class="dim">15 min</span></li>
+    <li>&#128337; Edit in timeline &mdash; <span class="dim">45 min</span></li>
+    <li>&#128337; Export &amp; upload &mdash; <span class="dim">10 min</span></li>
+    <li class="highlight">Total: ~2 hours per video</li>
+  </ul>
+</div>
+
+<!-- ===== SLIDE 4 : Architecture Diagram ===== -->
+<div class="slide" data-slide="4">
+  <h2>The <span class="blue">3-Layer</span> System</h2>
+  <div class="arch-stack" style="margin-top:24px;">
+    <div class="arch-box blue-box">
+      <span class="arch-emoji">&#128309;</span>
+      <span class="arch-label blue">Directives</span>
+      <span class="arch-desc">Markdown SOPs &mdash; "What to do"</span>
+    </div>
+    <div class="arch-arrow">&#8595;</div>
+    <div class="arch-box green-box">
+      <span class="arch-emoji">&#128994;</span>
+      <span class="arch-label green">Orchestration</span>
+      <span class="arch-desc">Claude Agent &mdash; "Decision making"</span>
+    </div>
+    <div class="arch-arrow">&#8595;</div>
+    <div class="arch-box accent-box">
+      <span class="arch-emoji">&#128993;</span>
+      <span class="arch-label accent">Execution</span>
+      <span class="arch-desc">Python Scripts &mdash; "Doing the work"</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SLIDE 5 : Layer 1 Directives ===== -->
+<div class="slide" data-slide="5">
+  <h2><span class="blue">Layer 1:</span> Directives</h2>
+  <div style="font-family:'JetBrains Mono',monospace; font-size:20px; color:var(--accent); margin-bottom:20px;">directives/</div>
+  <ul class="bullets" style="margin-top:8px;">
+    <li>Markdown files = <span class="bold">SOPs for the agent</span></li>
+    <li>Define goals, inputs, tools, outputs, edge cases</li>
+    <li>Like giving instructions to a <span class="green">mid-level employee</span></li>
+    <li>Living documents &mdash; <span class="accent">updated as the system learns</span></li>
+  </ul>
+</div>
+
+<!-- ===== SLIDE 6 : Directive Example ===== -->
+<div class="slide" data-slide="6">
+  <h3><span class="accent mono">tiktok_video.md</span></h3>
+  <div class="code-block medium" style="margin-top:20px;"><span class="code-comment">## Architecture</span>
+<span class="code-keyword">-</span> <span class="code-number">15</span> scenes, <span class="code-number">70</span> frames each (~<span class="code-number">2.33</span>s)
+<span class="code-keyword">-</span> TransitionSeries with <span class="code-number">10</span>-frame fades
+<span class="code-keyword">-</span> Total: <span class="code-number">1190</span> frames (~<span class="code-number">39.7</span>s)
+<span class="code-keyword">-</span> Resolution: <span class="code-number">1080</span>x<span class="code-number">1920</span> (TikTok vertical)
+
+<span class="code-comment">## Scene Structure</span>
+<span class="code-keyword">-</span> Each scene: background + SVG graphic + text overlay
+<span class="code-keyword">-</span> Per-scene narration (ElevenLabs TTS)
+<span class="code-keyword">-</span> Per-scene sound effect (ambient/impact)</div>
+</div>
+
+<!-- ===== SLIDE 7 : Scene Formula ===== -->
+<div class="slide" data-slide="7">
+  <h2>The <span class="accent">Scene Formula</span></h2>
+  <table class="scene-table" style="margin-top:20px;">
+    <thead>
+      <tr><th>Scenes</th><th>Purpose</th><th style="text-align:center;">Color</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="mono">0 - 1</td><td>Hook &mdash; Identify problem</td><td style="text-align:center;"><span class="red" style="font-size:22px;">&#9679;</span> <span class="red">RED</span></td></tr>
+      <tr><td class="mono">2 - 4</td><td>Pain &mdash; Stats, consequences</td><td style="text-align:center;"><span class="red" style="font-size:22px;">&#9679;</span> <span class="red">RED</span></td></tr>
+      <tr><td class="mono">5 - 6</td><td>Shift &mdash; Introduce solution</td><td style="text-align:center;"><span class="green" style="font-size:22px;">&#9679;</span> <span class="green">GREEN</span></td></tr>
+      <tr><td class="mono">7 - 9</td><td>Proof &mdash; How it works, ROI</td><td style="text-align:center;"><span class="green" style="font-size:22px;">&#9679;</span> <span class="green">GREEN</span></td></tr>
+      <tr><td class="mono">10 - 11</td><td>Scale &mdash; 24/7, compounding</td><td style="text-align:center;"><span class="green" style="font-size:22px;">&#9679;</span> <span class="green">GREEN</span></td></tr>
+      <tr><td class="mono">12 - 13</td><td>Urgency &mdash; Competitors ahead</td><td style="text-align:center;"><span class="accent" style="font-size:22px;">&#9679;</span> <span class="accent">ACCENT</span></td></tr>
+      <tr><td class="mono">14</td><td>CTA &mdash; DM keyword</td><td style="text-align:center;"><span class="green" style="font-size:22px;">&#9679;</span> <span class="green">GREEN</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ===== SLIDE 8 : Layer 2 Orchestration ===== -->
+<div class="slide" data-slide="8">
+  <h2><span class="green">Layer 2:</span> Orchestration</h2>
+  <div class="flow-h" style="margin-top:32px;">
+    <div class="flow-step" style="border-color: rgba(96,165,250,0.4);"><span class="blue">Read<br>Directive</span></div>
+    <div class="flow-arrow">&#10230;</div>
+    <div class="flow-step" style="border-color: rgba(96,165,250,0.4);"><span class="blue">Write<br>Script</span></div>
+    <div class="flow-arrow">&#10230;</div>
+    <div class="flow-step" style="border-color: rgba(74,222,128,0.4);"><span class="green">Create<br>.tsx</span></div>
+    <div class="flow-arrow">&#10230;</div>
+    <div class="flow-step" style="border-color: rgba(251,191,36,0.4);"><span class="accent">Run<br>Narration</span></div>
+    <div class="flow-arrow">&#10230;</div>
+    <div class="flow-step" style="border-color: rgba(251,191,36,0.4);"><span class="accent">Run<br>SFX</span></div>
+    <div class="flow-arrow">&#10230;</div>
+    <div class="flow-step" style="border-color: rgba(255,59,59,0.4);"><span class="red">Render<br>MP4</span></div>
+  </div>
+</div>
+
+<!-- ===== SLIDE 9 : Agent Decision Making ===== -->
+<div class="slide" data-slide="9">
+  <h2><span class="green">Intelligent</span> Routing</h2>
+  <ul class="bullets green-dots" style="margin-top:20px;">
+    <li>Reads the directive <span class="dim">(the SOP)</span></li>
+    <li>Calls execution tools <span class="bold">in the right order</span></li>
+    <li>Handles errors <span class="red">&#10230;</span> fixes <span class="green">&#10230;</span> retries</li>
+    <li>Updates directives with <span class="accent">learnings</span></li>
+  </ul>
+</div>
+
+<!-- ===== SLIDE 10 : Layer 3 Execution ===== -->
+<div class="slide" data-slide="10">
+  <h2><span class="accent">Layer 3:</span> Execution</h2>
+  <div class="code-block" style="margin-top:20px;"><span class="code-function">generate_{slug}_narration.py</span>    <span class="code-comment">&#8594; ElevenLabs TTS (15 clips)</span>
+<span class="code-function">generate_{slug}_sfx.py</span>          <span class="code-comment">&#8594; Sound Effects API (15 clips)</span>
+<span class="code-function">npx remotion render</span>             <span class="code-comment">&#8594; React &#8594; MP4</span>
+<span class="code-function">generate_capcut_project.py</span>      <span class="code-comment">&#8594; CapCut JSON injection</span></div>
+</div>
+
+<!-- ===== SLIDE 11 : ElevenLabs Narration ===== -->
+<div class="slide" data-slide="11">
+  <h2><span class="blue">Narration</span> Generation</h2>
+  <div class="flow-h" style="margin-top:24px; margin-bottom:32px;">
+    <div class="flow-step">Scene Text</div>
+    <div class="flow-arrow">&#10230;</div>
+    <div class="flow-step" style="border-color: rgba(96,165,250,0.4);"><span class="blue">ElevenLabs API</span></div>
+    <div class="flow-arrow">&#10230;</div>
+    <div class="flow-step" style="border-color: rgba(74,222,128,0.4);"><span class="green">MP3 Files</span></div>
+  </div>
+  <ul class="bullets" style="max-width:600px;">
+    <li>Voice: <span class="accent mono">Roger</span> <span class="dim">(CwhRBWXzGAHq8TQ4Fs17)</span></li>
+    <li>Model: <span class="mono">eleven_multilingual_v2</span></li>
+    <li>Stability: <span class="code-number mono">0.6</span> &bull; Similarity: <span class="code-number mono">0.75</span> &bull; Style: <span class="code-number mono">0.3</span></li>
+  </ul>
+</div>
+
+<!-- ===== SLIDE 12 : Narration Code ===== -->
+<div class="slide" data-slide="12">
+  <h3 style="margin-bottom:20px;"><span class="blue">Narration</span> Code</h3>
+  <div class="code-block small">resp = requests.<span class="code-function">post</span>(
+    <span class="code-string">f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}"</span>,
+    headers={<span class="code-string">"xi-api-key"</span>: API_KEY},
+    json={
+        <span class="code-string">"text"</span>: scene_text,
+        <span class="code-string">"model_id"</span>: <span class="code-string">"eleven_multilingual_v2"</span>,
+        <span class="code-string">"voice_settings"</span>: {
+            <span class="code-string">"stability"</span>: <span class="code-number">0.6</span>,
+            <span class="code-string">"similarity_boost"</span>: <span class="code-number">0.75</span>,
+            <span class="code-string">"style"</span>: <span class="code-number">0.3</span>,
+        }
+    }
+)</div>
+</div>
+
+<!-- ===== SLIDE 13 : SFX Generation ===== -->
+<div class="slide" data-slide="13">
+  <h2><span class="accent">Sound Effects</span></h2>
+  <ul class="bullets accent-dots" style="margin-top:20px;">
+    <li>Model: <span class="mono">eleven_text_to_sound_v2</span></li>
+    <li>Duration: <span class="accent bold">2.5s</span> per clip</li>
+    <li>Each scene gets a <span class="bold">unique SFX prompt</span></li>
+    <li style="padding-top:16px;">
+      <span class="dim">Example:</span><br>
+      <span class="mono" style="font-size:18px; color:var(--green);">"dramatic tension hit with low rumble,<br>&nbsp;bar chart dropping"</span>
+    </li>
+  </ul>
+</div>
+
+<!-- ===== SLIDE 14 : Remotion Title ===== -->
+<div class="slide" data-slide="14">
+  <h1 style="font-size:72px;">Remotion</h1>
+  <div class="small-subtitle" style="margin-top:16px; font-size:28px; font-style:normal;">Video creation in <span class="blue bold">React</span></div>
+  <div style="margin-top:40px; font-size:80px; opacity:0.15;">&#9654;</div>
+</div>
+
+<!-- ===== SLIDE 15 : Composition Structure ===== -->
+<div class="slide" data-slide="15">
+  <h3 style="margin-bottom:20px;">Composition Structure</h3>
+  <div class="code-block small"><span class="code-tag">&lt;TransitionSeries&gt;</span>
+  {SCENES.<span class="code-function">map</span>((_, i) =&gt; (
+    <span class="code-tag">&lt;TransitionSeries.Sequence</span>
+      <span class="code-attr">durationInFrames</span>={<span class="code-number">70</span> + <span class="code-number">10</span>}
+    <span class="code-tag">&gt;</span>
+      <span class="code-tag">&lt;Scene</span> <span class="code-attr">index</span>={i} <span class="code-tag">/&gt;</span>
+    <span class="code-tag">&lt;/TransitionSeries.Sequence&gt;</span>
+    <span class="code-tag">&lt;TransitionSeries.Transition</span>
+      <span class="code-attr">presentation</span>={<span class="code-function">fade</span>()}
+      <span class="code-attr">timing</span>={<span class="code-function">linearTiming</span>({
+        <span class="code-attr">durationInFrames</span>: <span class="code-number">10</span>
+      })}
+    <span class="code-tag">/&gt;</span>
+  ))}
+<span class="code-tag">&lt;/TransitionSeries&gt;</span></div>
+</div>
+
+<!-- ===== SLIDE 16 : SVG Graphics ===== -->
+<div class="slide" data-slide="16">
+  <h2>Every Scene = <span class="green">Custom SVG</span> Animation</h2>
+  <div class="graphics-grid" style="margin-top:28px;">
+    <div class="graphic-card">
+      <div class="icon">&#128200;</div>
+      <div class="card-title red">Shrinking Bar Chart</div>
+      <div class="card-scene">scene 0</div>
+    </div>
+    <div class="graphic-card">
+      <div class="icon">&#129302;</div>
+      <div class="card-title blue">Robot vs Human Hand</div>
+      <div class="card-scene">scene 4</div>
+    </div>
+    <div class="graphic-card">
+      <div class="icon">&#9201;</div>
+      <div class="card-title accent">Clock with Lightning</div>
+      <div class="card-scene">scene 8</div>
+    </div>
+    <div class="graphic-card">
+      <div class="icon">&#128187;</div>
+      <div class="card-title green">Terminal Typing Effect</div>
+      <div class="card-scene">scene 14</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SLIDE 17 : Audio Architecture ===== -->
+<div class="slide" data-slide="17">
+  <h2><span class="blue">3 Audio Layers</span> Per Scene</h2>
+  <div class="track-visual" style="margin-top:32px;">
+    <div class="track-row">
+      <div class="track-label">&#127916; Video</div>
+      <div class="track-bar" style="background:rgba(96,165,250,0.15); border:1px solid rgba(96,165,250,0.3);">
+        <div class="segments">
+          <div class="seg" style="background:var(--blue);"></div>
+          <div class="seg" style="background:var(--blue);"></div>
+          <div class="seg" style="background:var(--blue);"></div>
+          <div class="seg" style="background:var(--blue);"></div>
+          <div class="seg" style="background:var(--blue);"></div>
+          <div class="seg" style="background:var(--blue);"></div>
+          <div class="seg" style="background:var(--blue);"></div>
+          <div class="seg" style="background:var(--blue);"></div>
+          <div class="seg" style="background:var(--blue);"></div>
+          <div class="seg" style="background:var(--blue);"></div>
+          <div class="seg" style="background:var(--blue);"></div>
+          <div class="seg" style="background:var(--blue);"></div>
+          <div class="seg" style="background:var(--blue);"></div>
+          <div class="seg" style="background:var(--blue);"></div>
+          <div class="seg" style="background:var(--blue);"></div>
+        </div>
+      </div>
+      <div class="mono dim" style="font-size:13px; min-width:80px;">70 frames</div>
+    </div>
+    <div class="track-row">
+      <div class="track-label">&#127908; Narration</div>
+      <div class="track-bar" style="background:rgba(74,222,128,0.15); border:1px solid rgba(74,222,128,0.3);">
+        <div class="segments">
+          <div class="seg" style="background:var(--green);"></div>
+          <div class="seg" style="background:var(--green);"></div>
+          <div class="seg" style="background:var(--green);"></div>
+          <div class="seg" style="background:var(--green);"></div>
+          <div class="seg" style="background:var(--green);"></div>
+          <div class="seg" style="background:var(--green);"></div>
+          <div class="seg" style="background:var(--green);"></div>
+          <div class="seg" style="background:var(--green);"></div>
+          <div class="seg" style="background:var(--green);"></div>
+          <div class="seg" style="background:var(--green);"></div>
+          <div class="seg" style="background:var(--green);"></div>
+          <div class="seg" style="background:var(--green);"></div>
+          <div class="seg" style="background:var(--green);"></div>
+          <div class="seg" style="background:var(--green);"></div>
+          <div class="seg" style="background:var(--green);"></div>
+        </div>
+      </div>
+      <div class="mono dim" style="font-size:13px; min-width:80px;">per-scene</div>
+    </div>
+    <div class="track-row">
+      <div class="track-label">&#128266; SFX</div>
+      <div class="track-bar" style="background:rgba(251,191,36,0.15); border:1px solid rgba(251,191,36,0.3);">
+        <div class="segments">
+          <div class="seg" style="background:var(--accent);"></div>
+          <div class="seg" style="background:var(--accent);"></div>
+          <div class="seg" style="background:var(--accent);"></div>
+          <div class="seg" style="background:var(--accent);"></div>
+          <div class="seg" style="background:var(--accent);"></div>
+          <div class="seg" style="background:var(--accent);"></div>
+          <div class="seg" style="background:var(--accent);"></div>
+          <div class="seg" style="background:var(--accent);"></div>
+          <div class="seg" style="background:var(--accent);"></div>
+          <div class="seg" style="background:var(--accent);"></div>
+          <div class="seg" style="background:var(--accent);"></div>
+          <div class="seg" style="background:var(--accent);"></div>
+          <div class="seg" style="background:var(--accent);"></div>
+          <div class="seg" style="background:var(--accent);"></div>
+          <div class="seg" style="background:var(--accent);"></div>
+        </div>
+      </div>
+      <div class="mono dim" style="font-size:13px; min-width:80px;">vol=0.4</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SLIDE 18 : Render ===== -->
+<div class="slide" data-slide="18">
+  <h2><span class="red">Render</span></h2>
+  <div class="code-block" style="margin-top:28px; font-size:22px;">npx remotion render SmartAI out/smartai.mp4</div>
+  <div style="margin-top:32px; display:flex; gap:32px; flex-wrap:wrap; justify-content:center;">
+    <div style="text-align:center;">
+      <div style="font-size:36px; font-weight:800; color:var(--accent);">39.7s</div>
+      <div class="dim" style="font-size:14px;">duration</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:36px; font-weight:800; color:var(--blue);">30fps</div>
+      <div class="dim" style="font-size:14px;">frame rate</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:36px; font-weight:800; color:var(--green);">1080x1920</div>
+      <div class="dim" style="font-size:14px;">resolution</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SLIDE 19 : CapCut Title ===== -->
+<div class="slide" data-slide="19">
+  <h1 style="font-size:64px;"><span class="accent">CapCut</span> Integration</h1>
+  <div class="small-subtitle" style="margin-top:16px; font-size:24px; font-style:italic; color:var(--red);">The hardest part of the pipeline</div>
+</div>
+
+<!-- ===== SLIDE 20 : CapCut JSON ===== -->
+<div class="slide" data-slide="20">
+  <h3 style="margin-bottom:20px;"><span class="accent mono">draft_info.json</span></h3>
+  <div class="code-block small" style="line-height:1.7;"><span class="code-function">draft_info.json</span>
+<span class="code-comment">&#9500;&#9472;&#9472;</span> <span class="code-attr">canvas_config</span> <span class="code-comment">(1080x1920)</span>
+<span class="code-comment">&#9500;&#9472;&#9472;</span> <span class="code-keyword">materials</span>
+<span class="code-comment">&#9474;   &#9500;&#9472;&#9472;</span> <span class="code-function">videos[]</span>     <span class="code-comment">(15 video materials)</span>
+<span class="code-comment">&#9474;   &#9500;&#9472;&#9472;</span> <span class="code-function">audios[]</span>     <span class="code-comment">(30 audio materials)</span>
+<span class="code-comment">&#9474;   &#9500;&#9472;&#9472;</span> <span class="code-function">speeds[]</span>, <span class="code-function">canvases[]</span>, <span class="code-function">vocal_separations[]</span>
+<span class="code-comment">&#9492;&#9472;&#9472;</span> <span class="code-keyword">tracks[]</span>
+    <span class="code-comment">&#9500;&#9472;&#9472;</span> <span class="code-string">video track</span>      <span class="code-comment">(15 segments)</span>
+    <span class="code-comment">&#9500;&#9472;&#9472;</span> <span class="code-string">narration track</span>  <span class="code-comment">(15 segments)</span>
+    <span class="code-comment">&#9492;&#9472;&#9472;</span> <span class="code-string">sfx track</span>        <span class="code-comment">(15 segments)</span></div>
+</div>
+
+<!-- ===== SLIDE 21 : Video Material ===== -->
+<div class="slide" data-slide="21">
+  <h3 style="margin-bottom:20px;">Video Material</h3>
+  <div class="code-block small">{
+  <span class="code-string">"id"</span>: <span class="code-string">"UUID"</span>,
+  <span class="code-string">"local_material_id"</span>: <span class="code-string">"UUID"</span>,
+  <span class="code-string">"path"</span>: <span class="code-string">"/absolute/path/to/Resources/scene_00.mp4"</span>,
+  <span class="code-string">"duration"</span>: <span class="code-number">2690000</span>,
+  <span class="code-string">"width"</span>: <span class="code-number">1080</span>,
+  <span class="code-string">"height"</span>: <span class="code-number">1920</span>,
+  <span class="code-string">"type"</span>: <span class="code-string">"video"</span>
+}</div>
+</div>
+
+<!-- ===== SLIDE 22 : Audio Material ===== -->
+<div class="slide" data-slide="22">
+  <h3 style="margin-bottom:20px;">Audio Material</h3>
+  <div class="code-block small">{
+  <span class="code-string">"id"</span>: <span class="code-string">"UUID"</span>,
+  <span class="code-string">"local_material_id"</span>: <span class="code-string">"UUID"</span>,
+  <span class="code-string">"path"</span>: <span class="code-string">"/absolute/path/to/Resources/scene_00.mp3"</span>,
+  <span class="code-string">"duration"</span>: <span class="code-number">3060000</span>,
+  <span class="code-string">"name"</span>: <span class="code-string">"Narration 00"</span>,
+  <span class="code-string">"type"</span>: <span class="code-string">"extract_music"</span>
+}</div>
+</div>
+
+<!-- ===== SLIDE 23 : The Fix Journey ===== -->
+<div class="slide" data-slide="23">
+  <h2><span class="green">Path Resolution</span> Fix</h2>
+  <div class="before-after" style="margin-top:28px;">
+    <div class="ba-row before">
+      <div class="ba-label red">Before (broken)</div>
+      <span class="mono" style="font-size:15px;">##_draftpath_placeholder_{UUID}_##/Resources/scene_00.mp4</span>
+    </div>
+    <div style="text-align:center; font-size:28px; color:var(--green);">&#8595;</div>
+    <div class="ba-row after">
+      <div class="ba-label green">After (works)</div>
+      <span class="mono" style="font-size:15px;">/absolute/path/to/Resources/scene_00.mp4</span>
+    </div>
+  </div>
+  <p style="margin-top:24px; font-size:18px; color:var(--text-dim);">+ Copy all media into project's <span class="accent mono">Resources/</span> folder</p>
+</div>
+
+<!-- ===== SLIDE 24 : Cloud Sync ===== -->
+<div class="slide" data-slide="24">
+  <h2><span class="blue">Cloud Sync</span> to Mobile</h2>
+  <div class="flow-h" style="margin-top:32px;">
+    <div class="flow-step" style="font-size:20px; padding:20px 28px;">
+      <div style="font-size:36px; margin-bottom:8px;">&#128187;</div>
+      Mac
+    </div>
+    <div class="flow-arrow">&#10230;</div>
+    <div class="flow-step" style="font-size:20px; padding:20px 28px; border-color:rgba(96,165,250,0.4);">
+      <div style="font-size:36px; margin-bottom:8px;">&#9729;</div>
+      <span class="blue">CapCut Cloud</span>
+    </div>
+    <div class="flow-arrow">&#10230;</div>
+    <div class="flow-step" style="font-size:20px; padding:20px 28px; border-color:rgba(74,222,128,0.4);">
+      <div style="font-size:36px; margin-bottom:8px;">&#128241;</div>
+      <span class="green">iPad / iPhone</span>
+    </div>
+  </div>
+  <p style="margin-top:32px; font-size:20px; color:var(--text-dim);">Edit on the go, publish from mobile</p>
+</div>
+
+<!-- ===== SLIDE 25 : Results ===== -->
+<div class="slide" data-slide="25">
+  <div class="big-stat">11 Videos</div>
+  <p style="font-size:22px; color:var(--text-dim); margin-bottom:28px;">Generated with this pipeline</p>
+  <div class="video-grid">
+    <div class="video-tag"><span class="red">AI</span>Automation</div>
+    <div class="video-tag"><span class="blue">Email</span>Automation</div>
+    <div class="video-tag"><span class="green">Voice</span>Receptionist</div>
+    <div class="video-tag"><span class="accent">Why</span>Ads</div>
+    <div class="video-tag"><span class="accent">Why</span>SEO</div>
+    <div class="video-tag"><span class="accent">Why</span>Website</div>
+    <div class="video-tag"><span class="red">GoodBad</span>Ads</div>
+    <div class="video-tag"><span class="blue">AI</span>Chatbot</div>
+    <div class="video-tag"><span class="green">Social</span>MediaMarketing</div>
+    <div class="video-tag"><span class="accent">Smart</span>AI</div>
+  </div>
+</div>
+
+<!-- ===== SLIDE 26 : Live Demo Title ===== -->
+<div class="slide" data-slide="26">
+  <h1 style="font-size:72px;">Live <span class="green">Demo</span></h1>
+  <div class="small-subtitle" style="margin-top:16px; font-size:24px;">Watch the pipeline in action</div>
+  <div style="margin-top:48px; width:80px; height:80px; border-radius:50%; border:3px solid var(--green); display:flex; align-items:center; justify-content:center; font-size:36px; animation: pulse 2s ease infinite;">&#9654;</div>
+  <style>
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0.4); }
+      50% { box-shadow: 0 0 0 20px rgba(74,222,128,0); }
+    }
+  </style>
+</div>
+
+<!-- ===== SLIDE 27 : Pipeline Flow ===== -->
+<div class="slide" data-slide="27">
+  <h2>Pipeline <span class="accent">Flow</span></h2>
+  <div class="pipeline-flow" style="margin-top:24px;">
+    <div class="pipeline-row">
+      <div class="pipeline-step-box"><span class="accent">&#9312;</span> Topic Input</div>
+      <div class="pipeline-time">0s</div>
+    </div>
+    <div class="pipeline-row">
+      <div class="pipeline-step-box"><span class="blue">&#9313;</span> Script Generation</div>
+      <div class="pipeline-time">~30s</div>
+    </div>
+    <div class="pipeline-row">
+      <div class="pipeline-step-box"><span class="green">&#9314;</span> Narration (15 clips)</div>
+      <div class="pipeline-time">~60s</div>
+    </div>
+    <div class="pipeline-row">
+      <div class="pipeline-step-box"><span class="green">&#9315;</span> SFX (15 clips)</div>
+      <div class="pipeline-time">~45s</div>
+    </div>
+    <div class="pipeline-row">
+      <div class="pipeline-step-box"><span class="red">&#9316;</span> Remotion Render</div>
+      <div class="pipeline-time">~90s</div>
+    </div>
+    <div class="pipeline-row">
+      <div class="pipeline-step-box"><span class="accent">&#9317;</span> CapCut Project</div>
+      <div class="pipeline-time">~15s</div>
+    </div>
+    <div class="pipeline-row">
+      <div class="pipeline-step-box" style="border-color:rgba(74,222,128,0.4);"><span class="green">&#9318;</span> Publish</div>
+      <div class="pipeline-time" style="color:var(--green); font-weight:600;">~5 min total</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SLIDE 28 : Self-Annealing Title ===== -->
+<div class="slide" data-slide="28">
+  <h1 style="font-size:64px;">Self-<span class="accent">Annealing</span></h1>
+  <div class="small-subtitle" style="margin-top:16px; font-size:24px;">The system gets smarter over time</div>
+</div>
+
+<!-- ===== SLIDE 29 : Error Log ===== -->
+<div class="slide" data-slide="29">
+  <h3 style="margin-bottom:20px;"><span class="accent mono">CLAUDE.md</span> Error Log</h3>
+  <div class="code-block small" style="line-height:1.8;"><span class="code-comment">### [2026-02-06] MediaPipe removed solutions API</span>
+<span class="code-keyword">-</span> <span class="code-string">Pin to mediapipe==0.10.14</span>
+
+<span class="code-comment">### [2026-02-13] KIE rejects &lt;3s video</span>
+<span class="code-keyword">-</span> <span class="code-string">Ensure all segments &ge; 3 seconds</span>
+
+<span class="code-comment">### [2026-02-16] SSE parsing breaks on multi-line JSON</span>
+<span class="code-keyword">-</span> <span class="code-string">Buffer with iter_content(), split on \n\n</span>
+
+<span class="code-comment">### [2026-02-19] CapCut placeholder paths broken</span>
+<span class="code-keyword">-</span> <span class="code-string">Use absolute paths + copy to Resources/</span></div>
+</div>
+
+<!-- ===== SLIDE 30 : The Loop ===== -->
+<div class="slide" data-slide="30">
+  <h2>Error <span class="red">&#10230;</span> Fix <span class="green">&#10230;</span> Update <span class="accent">&#10230;</span> <span class="blue">Stronger</span></h2>
+  <div class="loop-diagram" style="margin-top:32px;">
+    <div class="loop-step" style="border-color:rgba(255,59,59,0.3);">
+      <div class="step-num red">1</div>
+      <div class="step-icon">&#128165;</div>
+      <div class="red bold">Hit an error</div>
+    </div>
+    <div class="loop-step" style="border-color:rgba(74,222,128,0.3);">
+      <div class="step-num green">2</div>
+      <div class="step-icon">&#128295;</div>
+      <div class="green bold">Fix the script</div>
+    </div>
+    <div class="loop-step" style="border-color:rgba(251,191,36,0.3);">
+      <div class="step-num accent">3</div>
+      <div class="step-icon">&#128221;</div>
+      <div class="accent bold">Update directive</div>
+    </div>
+    <div class="loop-step" style="border-color:rgba(96,165,250,0.3);">
+      <div class="step-num blue">4</div>
+      <div class="step-icon">&#128170;</div>
+      <div class="blue bold">System stronger</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SLIDE 31 : Speed Stat ===== -->
+<div class="slide" data-slide="31">
+  <div class="big-stat">5 minutes</div>
+  <p style="font-size:24px; margin-bottom:8px;">From topic to finished TikTok</p>
+  <p style="font-size:20px; color:var(--text-dim);">vs 2 hours manually = <span class="accent bold" style="font-size:28px;">24x faster</span></p>
+</div>
+
+<!-- ===== SLIDE 32 : Outro ===== -->
+<div class="slide" data-slide="32">
+  <h1 style="font-size:52px;">Build <span class="green">Your Own</span></h1>
+  <div class="outro-links" style="margin-top:32px;">
+    <div class="outro-link">
+      <div class="link-icon">&#128187;</div>
+      <div>Full code on <span class="bold">GitHub</span></div>
+    </div>
+    <div class="outro-link">
+      <div class="link-icon">&#128276;</div>
+      <div>Subscribe for more <span class="accent">AI automation</span> content</div>
+    </div>
+    <div class="outro-link">
+      <div class="link-icon">&#128172;</div>
+      <div>DM <span class="green mono bold">"pipeline"</span> to get started</div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /deck -->
+
+<script>
+(function() {
+  const slides = document.querySelectorAll('.slide');
+  const total  = slides.length;
+  let current  = 0;
+
+  const counter  = document.getElementById('counter');
+  const progress = document.getElementById('progress');
+
+  function show(index) {
+    if (index < 0 || index >= total) return;
+    slides[current].classList.remove('active');
+    current = index;
+    slides[current].classList.add('active');
+    counter.textContent = (current + 1) + ' / ' + total;
+    progress.style.width = ((current + 1) / total * 100) + '%';
+  }
+
+  function next() { show(current + 1); }
+  function prev() { show(current - 1); }
+
+  // Expose for click handlers
+  window.next = next;
+  window.prev = prev;
+
+  // Keyboard
+  document.addEventListener('keydown', function(e) {
+    switch(e.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+      case ' ':
+      case 'PageDown':
+        e.preventDefault();
+        next();
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+      case 'PageUp':
+        e.preventDefault();
+        prev();
+        break;
+      case 'Home':
+        e.preventDefault();
+        show(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        show(total - 1);
+        break;
+    }
+  });
+
+  // Touch swipe
+  let touchStartX = 0;
+  let touchStartY = 0;
+  document.addEventListener('touchstart', function(e) {
+    touchStartX = e.changedTouches[0].screenX;
+    touchStartY = e.changedTouches[0].screenY;
+  });
+  document.addEventListener('touchend', function(e) {
+    const dx = e.changedTouches[0].screenX - touchStartX;
+    const dy = e.changedTouches[0].screenY - touchStartY;
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
+      dx < 0 ? next() : prev();
+    }
+  });
+
+  // Init
+  show(0);
+})();
+</script>
+
+</body>
+</html>

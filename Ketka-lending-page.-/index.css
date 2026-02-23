@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+@theme {
+    --color-paper: #E8E4DD;
+    --color-signal: #E63B2E;
+    --color-offwhite: #F5F3EE;
+    --color-dark: #111111;
+    --color-success: #34C759;
+
+    --font-heading: 'Space Grotesk', sans-serif;
+    --font-drama: 'DM Serif Display', serif;
+    --font-mono: 'Space Mono', monospace;
+    --font-sans: 'Inter', sans-serif;
+
+    --animate-fade-in-up: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    --animate-fade-in: fadeIn 1s ease-out forwards;
+    --animate-shimmer: shimmer 2.5s infinite;
+    --animate-float: float 6s ease-in-out infinite;
+    --animate-pulse-slow: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    --animate-scale-in: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+
+    @keyframes fadeInUp {
+        0% { opacity: 0; transform: translateY(20px); }
+        100% { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+        0% { opacity: 0; }
+        100% { opacity: 1; }
+    }
+    @keyframes scaleIn {
+        0% { transform: scale(0.95); opacity: 0; }
+        100% { transform: scale(1); opacity: 1; }
+    }
+    @keyframes shimmer {
+        0% { transform: translateX(-100%); opacity: 0; }
+        50% { opacity: 0.5; }
+        100% { transform: translateX(100%); opacity: 0; }
+    }
+    @keyframes float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-10px); }
+    }
+}
+
+@layer base {
+    body {
+        @apply bg-paper text-dark relative font-sans;
+        -webkit-font-smoothing: antialiased;
+        scroll-behavior: smooth;
+    }
+}
+
+@layer utilities {
+    .magnetic-button {
+        @apply transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)];
+    }
+
+    .magnetic-button:hover {
+        transform: scale(1.03);
+    }
+
+    .noise-overlay {
+        @apply pointer-events-none fixed inset-0 z-[-1] opacity-5 mix-blend-multiply;
+    }
+}
+
+/* Modern Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #E8E4DD;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #111111;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #E63B2E;
+}
+
+/* Form Input Styles */
+.form-input {
+    background: #F5F3EE;
+    border: 1px solid transparent;
+    color: #111111;
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+}
+
+.form-input:focus {
+    border-color: rgba(17, 17, 17, 0.1);
+    background: #E8E4DD;
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(17, 17, 17, 0.05);
+}
+
+.form-input::placeholder {
+    color: #a3a3a3;
+}

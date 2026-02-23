@@ -1,0 +1,163 @@
+                    let ar = arguments;
+                    if (!cal.loaded) {
+                        cal.ns = {};
+                        cal.q = cal.q || [];
+                        d.head.appendChild(d.createElement("script")).src = A;
+                        cal.loaded = true;
+                    }
+                    if (ar[0] === L) {
+                        const api = function () { p(api, arguments); };
+                        const namespace = ar[1];
+                        api.q = api.q || [];
+                        if (typeof namespace === "string") {
+                            cal.ns[namespace] = cal.ns[namespace] || api;
+                            p(cal.ns[namespace], ar);
+                            p(cal, ["initNamespace", namespace]);
+                        } else p(cal, ar);
+                        return;
+                    }
+                    p(cal, ar);
+                };
+            })(window, "https://app.cal.com/embed/embed.js", "init");
+
+        Cal("init", "30min", { origin: "https://app.cal.com" });
+        Cal.ns["30min"]("inline", {
+            elementOrSelector: "#my-cal-inline-30min",
+            config: { "layout": "month_view" },
+            calLink: "ted-charles-enqyjn/30min",
+        });
+        Cal.ns["30min"]("ui", {
+            "styles": { "branding": { "brandColor": "#000000" } },
+            "hideEventTypeDetails": false,
+            "layout": "month_view"
+        });
+    </script>
+
+    <script type="module" src="/index.tsx"></script>
+
+    <!-- Main Logic Script -->
+    <script>
+        // Calculator Logic
+        const callsSlider = document.getElementById('calls-slider');
+        const valueSlider = document.getElementById('value-slider');
+        const rateSlider = document.getElementById('rate-slider');
+
+        const updateCalculator = () => {
+            const calls = parseInt(callsSlider.value);
+            const value = parseInt(valueSlider.value);
+            const rate = parseInt(rateSlider.value) / 100;
+
+            document.getElementById('calls-val').textContent = calls;
+            document.getElementById('value-val').textContent = `$${value}`;
+            document.getElementById('rate-val').textContent = `${Math.round(rate * 100)}%`;
+
+            const weeklyLoss = calls * value * rate;
+            const annualLoss = weeklyLoss * 52;
+
+            document.getElementById('total-loss').textContent = `$${annualLoss.toLocaleString()}`;
+        };
+
+        if (callsSlider) {
+            callsSlider.addEventListener('input', updateCalculator);
+            valueSlider.addEventListener('input', updateCalculator);
+            rateSlider.addEventListener('input', updateCalculator);
+        }
+
+        // Sticky CTA
+        window.addEventListener('scroll', () => {
+            const stickyCta = document.getElementById('sticky-cta');
+            if (window.scrollY > 600) {
+                stickyCta.classList.remove('translate-y-full');
+            } else {
+                stickyCta.classList.add('translate-y-full');
+            }
+        });
+
+        // Live Counter Animation
+        setInterval(() => {
+            const counter = document.getElementById('live-loss-counter');
+            if (counter) {
+                let current = parseFloat(counter.textContent.replace(/,/g, ''));
+                current += 12.50;
+                counter.textContent = current.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+        }, 2000);
+
+        // Voice Wave Background
+        const canvas = document.getElementById('voiceWaveCanvas');
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            const resizeCanvas = () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            };
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            let time = 0;
+            const animateWave = () => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.beginPath();
+                ctx.moveTo(0, canvas.height / 2);
+                for (let i = 0; i < canvas.width; i++) {
+                    const y = canvas.height / 2 + Math.sin(i * 0.01 + time) * 50 * Math.sin(i * 0.005);
+                    ctx.lineTo(i, y);
+                }
+                ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                time += 0.05;
+                requestAnimationFrame(animateWave);
+            };
+            animateWave();
+        }
+
+        // --- REACT APP TRIGGER LOGIC ---
+
+        // Form Submit -> Start Demo with Config
+        const form = document.getElementById('demoFormElement');
+        if (form) {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const config = {
+                    firstName: formData.get('firstName'),
+                    lastName: formData.get('lastName'),
+                    phone: formData.get('phone'),
+                    email: formData.get('email'),
+                    businessName: formData.get('businessName'),
+                    industry: formData.get('industry'),
+                    avgTicketValue: 300 // Default value, can be expanded in form
+                };
+
+                // Dispatch event to React App
+                window.dispatchEvent(new CustomEvent('start-demo', { detail: config }));
+            });
+        }
+
+        // Quick Start Buttons -> Open Setup Form
+        const triggerButtons = [
+            'nav-try-demo',
+            'hero-try-demo',
+            'how-works-try-demo',
+            'sticky-try-demo',
+            'pain-try-demo',
+            'calc-try-demo',
+            'price-starter-demo',
+            'price-growth-demo'
+        ];
+
+        triggerButtons.forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    // Show setup form first
+                    window.dispatchEvent(new CustomEvent('start-demo', { detail: null }));
+                });
+            }
+        });
+    </script>
+</body>
+
+</html>

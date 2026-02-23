@@ -24,11 +24,22 @@ load_dotenv()
 
 
 def scrape_upwork_jobs(
-    limit: int = 50,
+    limit: int = 200,
     from_date: str = None,
     to_date: str = None,
-) -> list[dict]:
-    """Scrape Upwork jobs using Apify actor (free tier filters only)."""
+    keywords: list = None,
+    experience_levels: list = None,
+    min_fixed_budget: int = None,
+    min_hourly_rate: int = None,
+    max_connects_cost: int = None,
+) -> list:
+    """Scrape Upwork jobs using Apify actor with SERVER-SIDE keyword + budget filtering.
+
+    This sends ALL filters to the actor in a SINGLE run (~$0.15) instead of
+    running separate scrapes per keyword ($0.15 each).
+
+    Budget rule: max $0.50/pipeline run. One call = ~$0.15.
+    """
 
     api_token = os.environ.get("APIFY_API_TOKEN")
     if not api_token:
@@ -37,18 +48,47 @@ def scrape_upwork_jobs(
     actor_id = "upwork-vibe~upwork-job-scraper"
     run_url = f"https://api.apify.com/v2/acts/{actor_id}/runs?token={api_token}"
 
-    # Free tier only supports: limit, fromDate, toDate
+    # Build input with server-side filters (single run, pre-filtered)
     input_data = {"limit": limit}
+
     if from_date:
         input_data["fromDate"] = from_date
     if to_date:
         input_data["toDate"] = to_date
 
-    print(f"Scraping Upwork jobs (limit: {limit})")
+    # Keywords — searched in title, description, AND skills server-side
+    if keywords:
+        input_data["includeKeywords"] = {
+            "keywords": keywords,
+            "matchTitle": True,
+            "matchDescription": True,
+            "matchSkills": True,
+        }
+
+    # Experience level filter
+    if experience_levels:
+        level_map = {"intermediate": "INTERMEDIATE", "expert": "EXPERT", "entry": "BEGINNER"}
+        input_data["vendor"] = {
+            "experienceLevel": [level_map.get(l.lower(), l.upper()) for l in experience_levels]
+        }
+
+    # Budget filters
+    budget_input = {}
+    if min_fixed_budget:
+        budget_input["fixedPrice"] = {"min": str(min_fixed_budget)}
+    if min_hourly_rate:
+        budget_input["hourlyRate"] = {"min": str(min_hourly_rate)}
+    if max_connects_cost:
+        budget_input["connectsPrice"] = {"max": max_connects_cost}
+    if budget_input:
+        input_data["budget"] = budget_input
+
+    print(f"Scraping Upwork jobs (limit: {limit}, 1 run, server-side filters)")
+    if keywords:
+        print(f"  Keywords: {', '.join(keywords)}")
     if from_date:
         print(f"  From: {from_date}")
-    if to_date:
-        print(f"  To: {to_date}")
+    print(f"  Est. cost: ~$0.15")
 
     # Start the actor run
     response = requests.post(run_url, json=input_data)
@@ -59,7 +99,7 @@ def scrape_upwork_jobs(
     run_id = run_info.get('data', {}).get('id')
     dataset_id = run_info.get('data', {}).get('defaultDatasetId')
 
-    print(f"Run started: {run_id}")
+    print(f"  Run started: {run_id}")
 
     # Wait for completion
     status_url = f"https://api.apify.com/v2/actor-runs/{run_id}?token={api_token}"
@@ -70,7 +110,7 @@ def scrape_upwork_jobs(
         if status_resp.ok:
             status = status_resp.json().get('data', {}).get('status')
             if status == 'SUCCEEDED':
-                print("Scraping completed!")
+                print("  Scraping completed!")
                 break
             elif status in ('FAILED', 'ABORTED', 'TIMED-OUT'):
                 raise Exception(f"Actor run failed with status: {status}")
@@ -86,7 +126,7 @@ def scrape_upwork_jobs(
         raise Exception(f"Failed to fetch results: {results_resp.text}")
 
     jobs = results_resp.json()
-    print(f"Fetched {len(jobs)} jobs from Apify")
+    print(f"  Fetched {len(jobs)} pre-filtered jobs from Apify")
     return jobs
 
 

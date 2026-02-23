@@ -253,7 +253,12 @@ def send_email(email_id):
         return jsonify({"error": "Email not found"}), 404
 
     try:
-        from services.smtp_sender import send_email_smtp, get_next_sender
+        from services.smtp_sender import send_email_smtp, get_next_sender, get_total_sends_today
+        from config import DAILY_SEND_LIMIT
+
+        # Check global daily cap
+        if get_total_sends_today() >= DAILY_SEND_LIMIT:
+            return jsonify({"error": f"Daily send limit reached ({DAILY_SEND_LIMIT}/day). Try again tomorrow."}), 429
 
         # Determine sender
         sender = email.get("sender_account")
@@ -261,7 +266,7 @@ def send_email(email_id):
             acc = get_next_sender()
             sender = acc["email"] if acc else None
         if not sender:
-            return jsonify({"error": "No sender account available"}), 400
+            return jsonify({"error": "No sender account available (all at daily limit)"}), 400
 
         # Determine recipient
         lead = db.get_lead_by_id(email.get("lead_id"))
@@ -325,17 +330,28 @@ def skip_email(email_id):
 
 @api_bp.route("/api/emails/<email_id>/preview")
 def preview_email(email_id):
-    """Get email HTML content for preview."""
+    """Get email HTML content for preview, with CID images resolved to real URLs."""
     email = db.get_email_by_id(email_id)
 
     if not email:
         return jsonify({"error": "Email not found"}), 404
 
+    html = email.get("html_content", "")
+    slug = email.get("slug", "")
+
+    # Replace CID image references with servable URLs for browser preview
+    if slug:
+        html = html.replace('src="cid:old-site-screenshot"', f'src="/api/screenshots/{slug}/old-site.png"')
+        html = html.replace('src="cid:new-site-screenshot"', f'src="/api/screenshots/{slug}/new-site.png"')
+        html = html.replace('src="cid:tracking-pixel"', 'src=""')
+
     return jsonify({
         "subject": email.get("subject", ""),
-        "html": email.get("html_content", ""),
+        "html": html,
         "status": email.get("status", ""),
         "touchpoint": email.get("touchpoint", 1),
+        "to_email": email.get("to_email", ""),
+        "slug": slug,
     })
 
 
@@ -402,6 +418,20 @@ def preview_spec_site(slug):
     if os.path.exists(html_path):
         with open(html_path) as f:
             return f.read(), 200, {"Content-Type": "text/html"}
+    return "Not found", 404
+
+
+@api_bp.route("/api/screenshots/<slug>/<filename>")
+def serve_screenshot(slug, filename):
+    """Serve old-site.png / new-site.png for email previews."""
+    import re
+    # Sanitize inputs
+    if not re.match(r'^[a-z0-9-]+$', slug) or not re.match(r'^[a-z0-9_.-]+$', filename):
+        return "Invalid path", 400
+    filepath = os.path.join(TMP_DIR, slug, filename)
+    if os.path.exists(filepath):
+        from flask import send_file
+        return send_file(filepath, mimetype="image/png")
     return "Not found", 404
 
 
@@ -634,10 +664,27 @@ def queue_skip(queue_id):
 
 @api_bp.route("/api/senders")
 def list_senders():
-    """List available @tedca.online sender accounts."""
-    from services.smtp_sender import get_sender_accounts
+    """List available @tedca.online sender accounts with today's usage."""
+    from services.smtp_sender import get_sender_accounts, get_total_sends_today
+    from config import DAILY_SEND_LIMIT
+
     accounts = get_sender_accounts()
+    today = date.today().isoformat()
+    send_counts = db.get_sends_per_sender_today(today)
+    total_sent = get_total_sends_today()
+
     return jsonify({
         "ok": True,
-        "senders": [{"email": a["email"], "display_name": a.get("display_name", "")} for a in accounts],
+        "senders": [
+            {
+                "email": a["email"],
+                "display_name": a.get("display_name", ""),
+                "daily_limit": a.get("daily_limit", 2),
+                "sent_today": send_counts.get(a["email"], 0),
+            }
+            for a in accounts
+        ],
+        "daily_limit": DAILY_SEND_LIMIT,
+        "total_sent_today": total_sent,
+        "remaining_today": max(0, DAILY_SEND_LIMIT - total_sent),
     })

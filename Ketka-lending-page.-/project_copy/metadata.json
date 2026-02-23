@@ -1,0 +1,7 @@
+{
+  "name": "Gemini Voice Receptionist",
+  "description": "A real-time conversational AI receptionist demo using Gemini 2.5 Live API.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

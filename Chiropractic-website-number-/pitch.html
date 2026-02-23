@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Action Chiropractic — Your New Website</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0f1a;
+    --bg-card: #111827;
+    --border: rgba(148, 163, 184, 0.08);
+    --text: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --green: #22c55e;
+    --green-glow: rgba(34, 197, 94, 0.12);
+    --red: #ef4444;
+    --red-glow: rgba(239, 68, 68, 0.1);
+    --blue: #3b82f6;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6;
+  }
+
+  /* ── Grid background ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(148, 163, 184, 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148, 163, 184, 0.025) 1px, transparent 1px);
+    background-size: 80px 80px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .page { position: relative; z-index: 1; }
+
+  /* ── Sections ── */
+  .section {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 80px 32px;
+  }
+
+  .section + .section {
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Hero / Hook ── */
+  .hook {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 120px 32px 80px;
+    text-align: center;
+    position: relative;
+  }
+
+  .hook::before {
+    content: '';
+    position: absolute;
+    top: -100px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(34, 197, 94, 0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hook-label {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--green);
+    padding: 6px 16px;
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    border-radius: 20px;
+    background: var(--green-glow);
+    margin-bottom: 32px;
+  }
+
+  .hook h1 {
+    font-size: 56px;
+    font-weight: 800;
+    line-height: 1.08;
+    letter-spacing: -2px;
+    margin-bottom: 24px;
+  }
+
+  .hook h1 .stat {
+    background: linear-gradient(135deg, var(--green), var(--blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hook .subtitle {
+    font-size: 20px;
+    color: var(--text-secondary);
+    max-width: 600px;
+    margin: 0 auto;
+    font-weight: 400;
+  }
+
+  /* ── Loss aversion block ── */
+  .loss-block {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.04), rgba(239, 68, 68, 0.01));
+    border: 1px solid rgba(239, 68, 68, 0.15);
+    border-radius: 20px;
+    padding: 48px 40px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .loss-block::before {
+    content: '';
+    position: absolute;
+    top: -60px;
+    right: -60px;
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(239, 68, 68, 0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .loss-block h2 {
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.5px;
+    margin-bottom: 16px;
+  }
+
+  .loss-block h2 .red {
+    color: var(--red);
+  }
+
+  .loss-block p {
+    font-size: 18px;
+    color: var(--text-secondary);
+    max-width: 620px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* ── Feature cards ── */
+  .features-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  .feature-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px 28px;
+    transition: border-color 0.3s, transform 0.3s;
+  }
+
+  .feature-card:hover {
+    border-color: rgba(34, 197, 94, 0.2);
+    transform: translateY(-2px);
+  }
+
+  .feature-icon {
+    font-size: 32px;
+    margin-bottom: 16px;
+    display: block;
+  }
+
+  .feature-card h3 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .feature-card p {
+    font-size: 14px;
+    color: var(--text-muted);
+    line-height: 1.55;
+  }
+
+  /* ── Section headers ── */
+  .section-header {
+    margin-bottom: 36px;
+  }
+
+  .section-header .label {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--green);
+    margin-bottom: 12px;
+  }
+
+  .section-header h2 {
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: -1px;
+    line-height: 1.15;
+  }
+
+  .section-header p {
+    font-size: 17px;
+    color: var(--text-secondary);
+    margin-top: 10px;
+    max-width: 600px;
+  }
+
+  /* ── Numbers row ── */
+  .numbers-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+  }
+
+  .number-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px 20px;
+    text-align: center;
+  }
+
+  .number-card.highlight-zero {
+    border-color: rgba(239, 68, 68, 0.25);
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.06), var(--bg-card));
+  }
+
+  .number-card .num {
+    font-size: 32px;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--green), var(--blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 6px;
+  }
+
+  .number-card.highlight-zero .num {
+    background: linear-gradient(135deg, var(--red), #f87171);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .number-card .desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  /* ── Social proof ── */
+  .proof-block {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.04), rgba(59, 130, 246, 0.04));
+    border: 1px solid rgba(34, 197, 94, 0.15);
+    border-radius: 16px;
+    padding: 36px 32px;
+    text-align: center;
+  }
+
+  .proof-block .big-stat {
+    font-size: 48px;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--green), var(--blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+
+  .proof-block p {
+    font-size: 18px;
+    color: var(--text-secondary);
+    max-width: 520px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }
+
+  .proof-block .source {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 12px;
+  }
+
+  /* ── CTA ── */
+  .cta-section {
+    text-align: center;
+    padding: 100px 32px;
+  }
+
+  .cta-section h2 {
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: -1.5px;
+    margin-bottom: 16px;
+  }
+
+  .cta-section h2 .green {
+    background: linear-gradient(135deg, var(--green), var(--blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .cta-section p {
+    font-size: 17px;
+    color: var(--text-secondary);
+    margin-bottom: 36px;
+  }
+
+  .cta-button {
+    display: inline-block;
+    background: linear-gradient(135deg, var(--green), #16a34a);
+    color: #fff;
+    font-size: 18px;
+    font-weight: 700;
+    padding: 18px 48px;
+    border-radius: 12px;
+    text-decoration: none;
+    letter-spacing: 0.3px;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 4px 24px rgba(34, 197, 94, 0.25);
+  }
+
+  .cta-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(34, 197, 94, 0.35);
+  }
+
+  .cta-meta {
+    margin-top: 24px;
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+
+  /* ── Divider ── */
+  .divider {
+    width: 60px;
+    height: 3px;
+    background: linear-gradient(90deg, var(--green), var(--blue));
+    border-radius: 2px;
+    margin: 0 auto;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 700px) {
+    .hook { padding: 80px 20px 60px; }
+    .hook h1 { font-size: 34px; letter-spacing: -1px; }
+    .hook .subtitle { font-size: 17px; }
+    .section { padding: 60px 20px; }
+    .features-grid { grid-template-columns: 1fr; }
+    .numbers-row { grid-template-columns: 1fr 1fr; }
+    .loss-block { padding: 36px 24px; }
+    .loss-block h2 { font-size: 24px; }
+    .loss-block p { font-size: 16px; }
+    .section-header h2 { font-size: 28px; }
+    .cta-section h2 { font-size: 30px; }
+    .proof-block .big-stat { font-size: 36px; }
+  }
+
+  /* ── Fade-in on scroll ── */
+  .fade-in {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .fade-in.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ═══ HOOK ═══ -->
+  <div class="hook fade-in">
+    <div class="hook-label">Built for Action Chiropractic P.C.</div>
+    <h1>Dr. Bromberg, <span class="stat">77%</span> of patients<br>search online before booking.</h1>
+    <p class="subtitle">Right now, when someone in Westbury Googles "chiropractor near me," they don't find Action Chiropractic. They find your competitors. We built something to change that.</p>
+  </div>
+
+  <!-- ═══ LOSS AVERSION ═══ -->
+  <div class="section">
+    <div class="loss-block fade-in">
+      <h2>Every patient who searches<br>"chiropractor Westbury NY" and can't find you<br><span class="red">books with someone else.</span></h2>
+      <p style="margin-top: 20px;">This isn't hypothetical. It's happening right now, every day. Patients in your area are actively looking for exactly the services you offer — spinal adjustments, sports rehab, X-rays — and they're walking into other offices because Action Chiropractic simply doesn't exist online. No website means no trust. No trust means no call.</p>
+    </div>
+  </div>
+
+  <!-- ═══ WHAT WE BUILT ═══ -->
+  <div class="section">
+    <div class="section-header fade-in">
+      <div class="label">What We Built for You</div>
+      <h2>Dr. Bromberg, this is already done.</h2>
+      <p>We created a complete online presence specifically for Action Chiropractic — your services, your location, your practice. Here's what's ready.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card fade-in">
+        <span class="feature-icon">&#x1F3A8;</span>
+        <h3>Professional Practice Showcase</h3>
+        <p>A cinematic hero section featuring Action Chiropractic with your professional photo, animated design elements, and an immediate sense of credibility. Patients see a modern, trustworthy practice the second they land.</p>
+      </div>
+      <div class="feature-card fade-in">
+        <span class="feature-icon">&#x1F9B4;</span>
+        <h3>8 Dedicated Service Pages</h3>
+        <p>Spinal adjustments, sports rehabilitation, pediatric care, X-rays on site — each service gets its own page with detailed descriptions, FAQs, and "What to Expect" sections. Se habla Espa&ntilde;ol is highlighted throughout to serve your full community.</p>
+      </div>
+      <div class="feature-card fade-in">
+        <span class="feature-icon">&#x1F4C5;</span>
+        <h3>Instant Online Booking</h3>
+        <p>A simple 5-field form with service pre-selection. Patients book in 30 seconds, day or night — no phone tag, no missed opportunities. Works perfectly on phones, tablets, and desktops.</p>
+      </div>
+      <div class="feature-card fade-in">
+        <span class="feature-icon">&#x1F50D;</span>
+        <h3>SEO Built for Westbury, NY</h3>
+        <p>Every page is structured to rank for "chiropractor Westbury NY," "back pain Long Island," and dozens of local searches. 8 indexable pages means 8x more chances for patients to find Action Chiropractic on Google.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ THE NUMBERS ═══ -->
+  <div class="section">
+    <div class="section-header fade-in">
+      <div class="label">The Numbers</div>
+      <h2>Where you are vs. where we'll take you.</h2>
+    </div>
+    <div class="numbers-row fade-in">
+      <div class="number-card highlight-zero">
+        <div class="num">0</div>
+        <div class="desc">Your Current Online Presence</div>
+      </div>
+      <div class="number-card">
+        <div class="num">8</div>
+        <div class="desc">Pages Built for You</div>
+      </div>
+      <div class="number-card">
+        <div class="num">100%</div>
+        <div class="desc">Mobile Optimized</div>
+      </div>
+      <div class="number-card">
+        <div class="num">&lt;2s</div>
+        <div class="desc">Load Time</div>
+      </div>
+      <div class="number-card">
+        <div class="num">SEO</div>
+        <div class="desc">Targeting Westbury</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SOCIAL PROOF ═══ -->
+  <div class="section">
+    <div class="proof-block fade-in">
+      <div class="big-stat">60%</div>
+      <p>Practices that go from <strong style="color: var(--text);">no website to a professional online presence</strong> see up to a 60% increase in new patient calls within the first 90 days. From invisible to fully booked — that's the transformation.</p>
+      <div class="source">Source: PatientPop Healthcare Marketing Study, 2024</div>
+    </div>
+  </div>
+
+  <!-- ═══ CTA ═══ -->
+  <div class="cta-section fade-in">
+    <div class="divider" style="margin-bottom: 48px;"></div>
+    <h2>Dr. Bromberg, let's put<br>Action Chiropractic <span class="green">on the map.</span></h2>
+    <p>Your website is built, tested, and ready to go live. Patients in Westbury are searching right now. Let's make sure they find you.</p>
+    <a href="tel:5162807470" class="cta-button">Let's Do This — This Week</a>
+    <div class="cta-meta">Action Chiropractic P.C. &bull; Dr. Bruce C. Bromberg &bull; Westbury, NY</div>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  var els = document.querySelectorAll('.fade-in');
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.15 });
+  els.forEach(function(el) { observer.observe(el); });
+  // Fire immediately for above-fold
+  setTimeout(function() {
+    els.forEach(function(el) {
+      var rect = el.getBoundingClientRect();
+      if (rect.top < window.innerHeight) el.classList.add('visible');
+    });
+  }, 100);
+})();
+</script>
+</body>
+</html>
