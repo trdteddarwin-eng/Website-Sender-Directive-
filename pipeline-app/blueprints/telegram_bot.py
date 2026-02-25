@@ -44,63 +44,58 @@ def telegram_webhook():
 
 @telegram_bp.route("/telegram/test", methods=["GET"])
 def telegram_test():
-    """Send a test message through the full handler flow and return diagnostics."""
-    from services.telegram_service import _load_active_draft
-
-    errors = []
-    results = {}
-
-    # 1. Check if draft loads from Supabase
-    try:
-        draft = _load_active_draft()
-        if draft:
-            results["draft_loaded"] = True
-            results["draft_id"] = draft.get("auto_reply_id", "")[:8]
-            results["lead_name"] = draft.get("lead_name", "")
-            results["body_preview"] = draft.get("current_body", "")[:80]
-        else:
-            results["draft_loaded"] = False
-            errors.append("No draft found in Supabase with status=draft")
-    except Exception as e:
-        results["draft_loaded"] = False
-        errors.append(f"Draft load error: {e}")
-
-    # 2. Try sending a plain text message (no Markdown)
+    """Test the full flow: load draft from Supabase, send message to Telegram."""
     import requests as req
+
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    results = {"errors": []}
 
+    # 1. Test draft loading
+    try:
+        from services.telegram_service import _load_active_draft
+        draft = _load_active_draft()
+        if draft:
+            results["draft"] = {
+                "id": draft.get("auto_reply_id", "")[:8],
+                "lead": draft.get("lead_name", ""),
+                "body_preview": draft.get("current_body", "")[:80],
+            }
+        else:
+            results["draft"] = None
+            results["errors"].append("No draft with status=draft found in Supabase")
+    except Exception as e:
+        results["draft"] = None
+        results["errors"].append(f"Draft load failed: {e}")
+
+    # 2. Send plain text test
     try:
         resp = req.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat_id, "text": "Test: bot is alive and can send messages."},
+            json={"chat_id": chat_id, "text": "Test: bot can send plain text."},
             timeout=10,
         )
-        results["plain_send"] = f"{resp.status_code}"
+        results["plain_text_send"] = resp.status_code
         if not resp.ok:
-            errors.append(f"Plain send failed: {resp.text[:200]}")
+            results["errors"].append(f"Plain text failed: {resp.text[:200]}")
     except Exception as e:
-        errors.append(f"Plain send error: {e}")
+        results["errors"].append(f"Send error: {e}")
 
-    # 3. Try sending WITH Markdown (like the handler does)
-    if draft:
-        test_msg = (
-            f"*Active draft:*\n"
-            f"To: {draft.get('lead_name', 'test')} ({draft.get('company', 'test')})\n\n"
-            f"---\n{draft.get('current_body', 'test body')}\n---\n\n"
-            f"Reply to revise"
-        )
+    # 3. Send a message with draft content (like the handler does)
+    if results.get("draft"):
+        body = results["draft"]["body_preview"]
+        lead = results["draft"]["lead"]
+        msg = f"Active draft:\nTo: {lead}\n\n---\n{body}\n---\n\nReply to revise, \"send\" to approve, \"skip\" to discard"
         try:
             resp2 = req.post(
                 f"https://api.telegram.org/bot{token}/sendMessage",
-                json={"chat_id": chat_id, "text": test_msg, "parse_mode": "Markdown"},
+                json={"chat_id": chat_id, "text": msg},
                 timeout=10,
             )
-            results["markdown_send"] = f"{resp2.status_code}"
+            results["draft_send"] = resp2.status_code
             if not resp2.ok:
-                errors.append(f"Markdown send failed: {resp2.text[:300]}")
+                results["errors"].append(f"Draft send failed: {resp2.text[:200]}")
         except Exception as e:
-            errors.append(f"Markdown send error: {e}")
+            results["errors"].append(f"Draft send error: {e}")
 
-    results["errors"] = errors
     return jsonify(results)

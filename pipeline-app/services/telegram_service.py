@@ -51,7 +51,6 @@ def _send_telegram(text, chat_id=None, reply_markup=None):
     payload = {
         "chat_id": chat_id or TELEGRAM_CHAT_ID,
         "text": text,
-        "parse_mode": "Markdown",
     }
     if reply_markup:
         payload["reply_markup"] = reply_markup
@@ -234,9 +233,9 @@ def _revise_current_draft(feedback, chat_id):
 
         # Show revised draft
         msg = (
-            f"*Revised draft:*\n"
+            f"Revised draft:\n"
             f"---\n{new_body}\n---\n\n"
-            f"Reply to revise again • \"send\" to approve • \"skip\" to discard"
+            f"Reply to revise again, \"send\" to approve, \"skip\" to discard"
         )
         _send_telegram(msg, chat_id)
 
@@ -251,10 +250,10 @@ def _send_status(chat_id):
         lead = draft.get("lead_name", "Unknown")
         company = draft.get("company", "")
         msg = (
-            f"*Active draft:*\n"
+            f"Active draft:\n"
             f"To: {lead} ({company})\n\n"
             f"---\n{draft['current_body']}\n---\n\n"
-            f"Reply to revise • \"send\" to approve • \"skip\" to discard"
+            f"Reply to revise, \"send\" to approve, \"skip\" to discard"
         )
     else:
         msg = "No active draft. I'll notify you when a lead replies."
