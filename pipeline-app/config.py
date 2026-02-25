@@ -16,9 +16,9 @@ GOOGLE_CREDS_PATH = os.path.join(WORKSPACE_ROOT, "credentials.json")
 # Local data directory for operational tables (pipeline_runs, emails, etc.)
 LOCAL_DATA_DIR = os.path.join(WORKSPACE_ROOT, ".tmp", "pipeline-data")
 
-# Supabase (strip whitespace — Railway env vars sometimes have line breaks)
-SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
+# Supabase (clean whitespace — Railway env vars sometimes have line breaks)
+SUPABASE_URL = "".join(os.getenv("SUPABASE_URL", "").split())
+SUPABASE_KEY = "".join(os.getenv("SUPABASE_KEY", "").split())
 
 # API Keys
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
