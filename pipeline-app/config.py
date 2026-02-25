@@ -16,9 +16,9 @@ GOOGLE_CREDS_PATH = os.path.join(WORKSPACE_ROOT, "credentials.json")
 # Local data directory for operational tables (pipeline_runs, emails, etc.)
 LOCAL_DATA_DIR = os.path.join(WORKSPACE_ROOT, ".tmp", "pipeline-data")
 
-# Supabase
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+# Supabase (strip whitespace — Railway env vars sometimes have line breaks)
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
 
 # API Keys
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
@@ -26,6 +26,7 @@ NETLIFY_AUTH_TOKEN = os.getenv("NETLIFY_AUTH_TOKEN", "")
 NETLIFY_SITE_ID = os.getenv("NETLIFY_SITE_ID", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 SECRET_KEY = os.getenv("SECRET_KEY", "")
+WEBHOOK_HMAC_SECRET = os.getenv("WEBHOOK_HMAC_SECRET", "")
 
 # Email open tracking (Netlify Function)
 TRACKER_BASE_URL = os.getenv("TRACKER_BASE_URL", "")
