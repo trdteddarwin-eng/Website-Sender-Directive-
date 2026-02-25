@@ -13,8 +13,34 @@ from services.auto_reply_service import send_draft_reply
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
-# In-memory state: one user, one active draft at a time
+# In-memory cache of active draft (populated from Supabase on demand)
 _active_draft = {}
+
+
+def _load_active_draft():
+    """Load the most recent draft from Supabase if in-memory cache is empty."""
+    global _active_draft
+    if _active_draft:
+        return _active_draft
+
+    # Get most recent draft from Supabase
+    drafts = db.get_auto_replies(status="draft", limit=1)
+    if not drafts:
+        return {}
+
+    draft = drafts[0]
+    lead = db.get_lead_by_id(draft.get("lead_id")) if draft.get("lead_id") else None
+
+    _active_draft = {
+        "auto_reply_id": draft["id"],
+        "current_body": draft.get("reply_body", ""),
+        "reply_subject": draft.get("reply_subject", ""),
+        "lead_name": (lead.get("first_name") or lead.get("full_name", "")) if lead else "",
+        "company": lead.get("company_name", "") if lead else "",
+        "sender_name": "Ted",
+        "incoming_from": draft.get("incoming_from", ""),
+    }
+    return _active_draft
 
 
 def _send_telegram(text, chat_id=None, reply_markup=None):
@@ -72,11 +98,6 @@ def set_active_draft(auto_reply_id, reply_body, reply_subject, lead_name,
     }
 
 
-def get_active_draft():
-    """Return current active draft (for testing/debugging)."""
-    return _active_draft
-
-
 def handle_message(text, chat_id):
     """Route incoming Telegram text messages."""
     text_lower = text.strip().lower()
@@ -99,6 +120,8 @@ def handle_callback(callback_query, chat_id):
     if callback_data.startswith("send_"):
         auto_reply_id = callback_data[5:]
         _answer_callback(callback_id, "Sending...")
+        # Load this specific draft into active state
+        _load_draft_by_id(auto_reply_id)
         return _send_draft_by_id(auto_reply_id, chat_id)
     elif callback_data.startswith("skip_"):
         auto_reply_id = callback_data[5:]
@@ -108,14 +131,33 @@ def handle_callback(callback_query, chat_id):
         _answer_callback(callback_id, "Unknown action")
 
 
+def _load_draft_by_id(auto_reply_id):
+    """Load a specific draft into active state from Supabase."""
+    global _active_draft
+    draft = db.get_auto_reply_by_id(auto_reply_id)
+    if not draft or draft.get("status") != "draft":
+        return
+    lead = db.get_lead_by_id(draft.get("lead_id")) if draft.get("lead_id") else None
+    _active_draft = {
+        "auto_reply_id": draft["id"],
+        "current_body": draft.get("reply_body", ""),
+        "reply_subject": draft.get("reply_subject", ""),
+        "lead_name": (lead.get("first_name") or lead.get("full_name", "")) if lead else "",
+        "company": lead.get("company_name", "") if lead else "",
+        "sender_name": "Ted",
+        "incoming_from": draft.get("incoming_from", ""),
+    }
+
+
 def _send_current_draft(chat_id):
     """Send the currently active draft."""
     global _active_draft
-    if not _active_draft:
+    draft = _load_active_draft()
+    if not draft:
         _send_telegram("No active draft to send. Wait for a new lead reply.", chat_id)
         return
 
-    return _send_draft_by_id(_active_draft["auto_reply_id"], chat_id)
+    return _send_draft_by_id(draft["auto_reply_id"], chat_id)
 
 
 def _send_draft_by_id(auto_reply_id, chat_id):
@@ -140,11 +182,12 @@ def _send_draft_by_id(auto_reply_id, chat_id):
 def _skip_current_draft(chat_id):
     """Skip/discard the currently active draft."""
     global _active_draft
-    if not _active_draft:
+    draft = _load_active_draft()
+    if not draft:
         _send_telegram("No active draft to skip.", chat_id)
         return
 
-    return _skip_draft_by_id(_active_draft["auto_reply_id"], chat_id)
+    return _skip_draft_by_id(draft["auto_reply_id"], chat_id)
 
 
 def _skip_draft_by_id(auto_reply_id, chat_id):
@@ -162,7 +205,8 @@ def _skip_draft_by_id(auto_reply_id, chat_id):
 def _revise_current_draft(feedback, chat_id):
     """Revise the active draft using AI based on user feedback."""
     global _active_draft
-    if not _active_draft:
+    draft = _load_active_draft()
+    if not draft:
         _send_telegram(
             "No active draft to revise. Wait for a new lead reply, or type \"status\" to check.",
             chat_id,
@@ -175,18 +219,18 @@ def _revise_current_draft(feedback, chat_id):
         from generate_reply_email import revise_reply
 
         result = revise_reply(
-            current_draft=_active_draft["current_body"],
+            current_draft=draft["current_body"],
             user_feedback=feedback,
-            lead_name=_active_draft["lead_name"],
-            company=_active_draft["company"],
-            sender_name=_active_draft["sender_name"],
+            lead_name=draft["lead_name"],
+            company=draft["company"],
+            sender_name=draft["sender_name"],
         )
 
-        new_body = result.get("reply_body", _active_draft["current_body"])
+        new_body = result.get("reply_body", draft["current_body"])
         _active_draft["current_body"] = new_body
 
         # Update in Supabase too
-        db.update_auto_reply(_active_draft["auto_reply_id"], {"reply_body": new_body})
+        db.update_auto_reply(draft["auto_reply_id"], {"reply_body": new_body})
 
         # Show revised draft
         msg = (
@@ -202,13 +246,14 @@ def _revise_current_draft(feedback, chat_id):
 
 def _send_status(chat_id):
     """Send bot status / active draft info."""
-    if _active_draft:
-        lead = _active_draft.get("lead_name", "Unknown")
-        company = _active_draft.get("company", "")
+    draft = _load_active_draft()
+    if draft:
+        lead = draft.get("lead_name", "Unknown")
+        company = draft.get("company", "")
         msg = (
             f"*Active draft:*\n"
             f"To: {lead} ({company})\n\n"
-            f"---\n{_active_draft['current_body']}\n---\n\n"
+            f"---\n{draft['current_body']}\n---\n\n"
             f"Reply to revise • \"send\" to approve • \"skip\" to discard"
         )
     else:
