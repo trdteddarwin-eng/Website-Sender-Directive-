@@ -54,12 +54,18 @@ def telegram_test():
 
     # 1. Test Supabase connection
     try:
+        from config import SUPABASE_URL, SUPABASE_KEY
+        results["supabase_url"] = SUPABASE_URL[:40] + "..." if SUPABASE_URL else "NOT SET"
+        results["supabase_key"] = f"set ({len(SUPABASE_KEY)} chars)" if SUPABASE_KEY else "NOT SET"
+
         from services import supabase_client as test_db
         drafts = test_db.get_auto_replies(status="draft", limit=1)
         results["supabase"] = "ok"
         results["existing_drafts"] = len(drafts)
     except Exception as e:
+        import traceback
         results["supabase"] = f"error: {e}"
+        results["supabase_traceback"] = traceback.format_exc()[-500:]
         results["errors"].append(f"Supabase failed: {e}")
 
     # 2. Test Telegram send (plain text, no Markdown)
