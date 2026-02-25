@@ -6,7 +6,7 @@ from flask import Blueprint, request, jsonify
 
 from services.telegram_service import handle_message, handle_callback
 
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
 telegram_bp = Blueprint("telegram_bot", __name__)
 
@@ -53,12 +53,17 @@ def telegram_debug():
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
     openrouter = os.getenv("OPENROUTER_API_KEY", "")
 
+    # Strip whitespace (Railway env vars sometimes have trailing chars)
+    token = token.strip()
+    chat_id = chat_id.strip()
+
     # Try sending a test message
     send_result = "skipped"
     if token and chat_id:
         try:
+            url = f"https://api.telegram.org/bot{token}/sendMessage"
             resp = req.post(
-                f"https://api.telegram.org/bot{token}/sendMessage",
+                url,
                 json={"chat_id": chat_id, "text": "Debug test from Railway"},
                 timeout=10,
             )

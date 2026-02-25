@@ -47,8 +47,8 @@ def create_app():
     # Set Telegram webhook on Railway
     try:
         import requests as _req
-        _tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-        _railway_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
+        _tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+        _railway_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
         if _tg_token and _railway_domain:
             webhook_url = f"https://{_railway_domain}/telegram/webhook"
             resp = _req.post(

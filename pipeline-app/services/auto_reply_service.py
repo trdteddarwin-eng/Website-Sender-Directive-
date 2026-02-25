@@ -11,8 +11,8 @@ from email.utils import formatdate, make_msgid
 from datetime import datetime
 
 # Telegram notification config
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from services import supabase_client as db
