@@ -72,7 +72,7 @@ def telegram_debug():
             send_result = f"error: {e}"
 
     return jsonify({
-        "TELEGRAM_BOT_TOKEN": f"set ({len(token)} chars)" if token else "NOT SET",
+        "TELEGRAM_BOT_TOKEN": f"set ({len(token)} chars, starts={token[:12]}..., ends=...{token[-4:]})" if token else "NOT SET",
         "TELEGRAM_CHAT_ID": chat_id if chat_id else "NOT SET",
         "OPENROUTER_API_KEY": f"set ({len(openrouter)} chars)" if openrouter else "NOT SET",
         "RAILWAY_PUBLIC_DOMAIN": os.getenv("RAILWAY_PUBLIC_DOMAIN", "NOT SET"),
