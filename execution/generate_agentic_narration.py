@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Generate narration audio for AI Chatbot video using ElevenLabs TTS.
+Generate narration audio for Agentic Workflow video using ElevenLabs TTS.
 
 Usage:
-  python execution/generate_chatbot_narration.py
+  python execution/generate_agentic_narration.py
 
 Output:
-  yt-growth-chart/public/narration-chatbot/scene_00.mp3 ... scene_14.mp3
+  yt-growth-chart/public/narration-agentic/scene_00.mp3 ... scene_14.mp3
 """
 
 import os
@@ -14,7 +14,7 @@ import time
 import requests
 
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "sk_19970146a3f8d3964e93feb3aff4acb54b2732be03e2cf5c")
-OUTPUT_DIR = "yt-growth-chart/public/narration-chatbot"
+OUTPUT_DIR = "yt-growth-chart/public/narration-agentic"
 
 # Voice: Roger (CwhRBWXzGAHq8TQ4Fs17)
 VOICE_ID = "CwhRBWXzGAHq8TQ4Fs17"
@@ -22,21 +22,21 @@ MODEL_ID = "eleven_multilingual_v2"
 
 # Scene narration texts (speakable — no special characters, numbers spelled out)
 SCENES = [
-    "Your customers are waiting for a reply",
-    "Average response time? Twelve hours.",
-    "Sixty percent of customers won't wait that long",
-    "Bad support kills repeat business",
-    "What if AI answered every ticket instantly?",
-    "It reads the message. Understands the intent.",
-    "Pulls the right answer from your knowledge base",
-    "Resolves eighty percent of tickets automatically",
-    "Escalates complex issues to your team",
-    "Customers get answers in under thirty seconds",
-    "Works in every language across all channels",
-    "Handles thousands of tickets simultaneously",
-    "Your competitors already have this running",
-    "Every unanswered ticket is a lost customer",
-    "DM chatbot to get your AI support agent",
+    "You're still doing everything manually?",
+    "Send emails. Follow up. Update CRM. Repeat.",
+    "Your team spends eighty percent on busywork",
+    "While leads slip through the cracks",
+    "What if an AI agent handled it all?",
+    "It finds your leads automatically",
+    "Writes personalized outreach for each one",
+    "Follows up at the perfect moment",
+    "Books meetings while you sleep",
+    "One agent does the work of five employees",
+    "Runs twenty four seven. Never calls in sick.",
+    "Learns and improves with every interaction",
+    "Your competitors already automated this",
+    "Every day without AI costs you deals",
+    "DM automate to get your AI workflow",
 ]
 
 

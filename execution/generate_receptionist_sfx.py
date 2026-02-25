@@ -6,31 +6,32 @@ Usage:
   python execution/generate_receptionist_sfx.py
 
 Output:
-  tiktok-recreation/public/sfx-receptionist/sfx_00.mp3 ... sfx_14.mp3
+  yt-growth-chart/public/sfx-receptionist/sfx_00.wav ... sfx_14.wav
 """
 
 import os
 import time
 from replicate_sfx import generate_sfx
-OUTPUT_DIR = "tiktok-recreation/public/sfx-receptionist"
+
+OUTPUT_DIR = "yt-growth-chart/public/sfx-receptionist"
 
 # Per-scene SFX prompts matched to Voice Receptionist video scenes
 SFX_SCENES = [
-    {"prompt": "phone ringing in empty dark room, echoing unanswered, lonely and ominous", "duration": 2.5},
-    {"prompt": "multiple phone ring tones cutting off abruptly one by one, missed calls", "duration": 2.5},
-    {"prompt": "phone hang-up click sound repeated, dial tone fading, abandonment", "duration": 2.5},
-    {"prompt": "phone dialing new number with competitive urgency, switching attention", "duration": 2.5},
-    {"prompt": "cash register opening with money being swept away, financial loss whoosh", "duration": 2.5},
-    {"prompt": "bright phone pickup click with instant connection tone, clean and welcoming", "duration": 2.5},
-    {"prompt": "single crisp phone ring then smooth robotic answer, professional and fast", "duration": 2.5},
-    {"prompt": "warm natural human-like voice hum with smooth audio wave, pleasant and real", "duration": 2.5},
-    {"prompt": "checklist items being ticked off rapidly, pen clicks and paper, organized efficiency", "duration": 2.5},
-    {"prompt": "calendar appointment booking confirmation chime, scheduling click, organized", "duration": 2.5},
-    {"prompt": "phone notification ping with text message whoosh, summary delivered", "duration": 2.5},
-    {"prompt": "steady reliable hum with clock ticking 24 hours, always running, dependable", "duration": 2.5},
-    {"prompt": "hold music cutting off abruptly then clean silence with success chime", "duration": 2.5},
-    {"prompt": "old cassette tape rewinding versus modern digital activation sound, contrast", "duration": 2.5},
-    {"prompt": "phone ringing with bright green energy pulse, answered perfectly, triumphant", "duration": 2.5},
+    {"prompt": "phone ringing then abruptly stopping with missed call buzz, opportunity lost", "duration": 3},
+    {"prompt": "voicemail beep repeating with inbox full notification alarm", "duration": 3},
+    {"prompt": "phone callback ringtone fading to static silence, no return", "duration": 3},
+    {"prompt": "money coins draining down metal pipe drain, revenue loss", "duration": 3},
+    {"prompt": "futuristic AI activation with phone pickup click and power surge", "duration": 3},
+    {"prompt": "warm natural voice speaking with smooth audio waveform flow", "duration": 3},
+    {"prompt": "triple checkmark stamps clicking in succession, qualification complete", "duration": 3},
+    {"prompt": "calendar appointment booking confirmation chime, scheduling success", "duration": 3},
+    {"prompt": "mobile notification ping with paper summary rustling", "duration": 3},
+    {"prompt": "multiple phone lines connecting simultaneously with digital switchboard", "duration": 3},
+    {"prompt": "globe spinning with multilingual voice whispers overlapping", "duration": 3},
+    {"prompt": "steady reliable machine humming twenty four seven, always on", "duration": 3},
+    {"prompt": "phone pickup on left side contrasting with voicemail beep on right, split", "duration": 3},
+    {"prompt": "dollar bills with flapping wings flying away into distance, money lost", "duration": 3},
+    {"prompt": "rocket engine ignition with ascending power and sparkle trail", "duration": 3},
 ]
 
 
@@ -41,7 +42,7 @@ def main():
     print(f"Output: {OUTPUT_DIR}/\n")
 
     for i, scene in enumerate(SFX_SCENES):
-        output_path = os.path.join(OUTPUT_DIR, f"sfx_{i:02d}.mp3")
+        output_path = os.path.join(OUTPUT_DIR, f"sfx_{i:02d}.wav")
 
         if os.path.exists(output_path):
             print(f"  Scene {i:2d}: already exists, skipping")
@@ -55,9 +56,9 @@ def main():
             print(f" FAILED: {e}")
             continue
 
-        time.sleep(1.0)
+        time.sleep(12.0)  # rate limit: 6 req/min with <$5 credit
 
-    generated = [f for f in os.listdir(OUTPUT_DIR) if f.endswith(".mp3")]
+    generated = [f for f in os.listdir(OUTPUT_DIR) if f.endswith(".wav")]
     print(f"\nDone! Generated {len(generated)}/{len(SFX_SCENES)} SFX files in {OUTPUT_DIR}/")
 
 

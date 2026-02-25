@@ -1,0 +1,493 @@
+{% extends "base.html" %}
+{% block title %}Emails — TedCA Pipeline{% endblock %}
+
+{% block head %}
+<style>
+  .email-hub-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--card-border); margin-bottom: 0; }
+  .email-hub-tab {
+    padding: 10px 20px; font-size: 13px; font-weight: 500; cursor: pointer;
+    color: var(--text-dim); border-bottom: 2px solid transparent;
+    transition: all .15s; background: none; border-top: none; border-left: none; border-right: none;
+    font-family: var(--font); position: relative;
+  }
+  .email-hub-tab.active { color: #1d1d1f; border-bottom-color: #1d1d1f; }
+  .email-hub-tab:hover { color: var(--text); }
+  .email-hub-tab .tab-count {
+    font-size: 10px; font-weight: 700; background: var(--bg-raised); color: var(--text-dim);
+    padding: 1px 6px; border-radius: 8px; margin-left: 6px;
+  }
+  .email-hub-tab.active .tab-count { background: #1d1d1f; color: #fff; }
+
+  .email-table-wrap { min-height: 300px; }
+  .email-row { cursor: pointer; }
+  .email-row:hover { background: var(--card-hover); }
+  .email-row.selected { background: rgba(29,29,31,0.05); }
+
+  .email-preview-panel {
+    position: fixed; top: 0; right: -520px; width: 520px; height: 100vh;
+    background: #fff; border-left: 1px solid var(--card-border); z-index: 500;
+    transition: right .25s ease; box-shadow: -4px 0 20px rgba(0,0,0,0.08);
+    display: flex; flex-direction: column;
+  }
+  .email-preview-panel.open { right: 0; }
+  .email-preview-header {
+    padding: 20px; border-bottom: 1px solid var(--card-border);
+    display: flex; justify-content: space-between; align-items: flex-start;
+  }
+  .email-preview-meta { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
+  .email-preview-meta div { margin-bottom: 3px; }
+  .email-preview-body { flex: 1; overflow: hidden; }
+  .email-preview-body iframe { width: 100%; height: 100%; border: none; }
+  .email-preview-backdrop {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.15); z-index: 499; display: none;
+  }
+  .email-preview-backdrop.open { display: block; }
+
+  .sentiment-positive { background: rgba(52,199,89,0.1); color: #34c759; }
+  .sentiment-negative { background: rgba(255,59,48,0.1); color: #ff3b30; }
+  .sentiment-neutral { background: #f5f5f7; color: #86868b; }
+  .sentiment-out_of_office { background: rgba(255,149,0,0.1); color: #ff9500; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Email Hub</h2>
+    <div class="subtitle">All outreach emails across every status</div>
+  </div>
+  <div class="flex gap-2">
+    <a href="/drafts" class="btn btn-ghost">Compose</a>
+  </div>
+</div>
+
+<!-- KPI Row -->
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="kpi-label">Total Sent</div>
+    <div class="kpi-value" id="kpi-sent">{{ email_stats.sent }}</div>
+    <div class="kpi-sub" id="kpi-sent-sub">{{ email_stats.total }} total emails</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Open Rate</div>
+    <div class="kpi-value" id="kpi-open-rate">{{ email_stats.open_rate }}%</div>
+    <div class="kpi-sub" id="kpi-open-sub">{{ email_stats.opened }} opened</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Reply Rate</div>
+    <div class="kpi-value" id="kpi-reply-rate">{{ email_stats.reply_rate }}%</div>
+    <div class="kpi-sub" id="kpi-reply-sub">{{ email_stats.replied }} replies</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Bounce Rate</div>
+    <div class="kpi-value" id="kpi-bounce-rate">{{ email_stats.bounce_rate }}%</div>
+    <div class="kpi-sub" id="kpi-bounce-sub">{{ email_stats.bounced }} bounced</div>
+  </div>
+</div>
+
+<!-- Tabs + Filters -->
+<div class="card" style="padding: 0;">
+  <div style="padding: 16px 20px 0;">
+    <div class="email-hub-tabs" id="email-tabs">
+      <button class="email-hub-tab active" data-tab="sent" onclick="switchTab('sent')">
+        Sent <span class="tab-count" id="count-sent">-</span>
+      </button>
+      <button class="email-hub-tab" data-tab="draft" onclick="switchTab('draft')">
+        Drafts <span class="tab-count" id="count-draft">-</span>
+      </button>
+      <button class="email-hub-tab" data-tab="bounced" onclick="switchTab('bounced')">
+        Bounced <span class="tab-count" id="count-bounced">-</span>
+      </button>
+      <button class="email-hub-tab" data-tab="replies" onclick="switchTab('replies')">
+        Replies <span class="tab-count" id="count-replies">-</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div style="padding: 12px 20px; border-bottom: 1px solid var(--card-border); display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+    <input type="text" class="search-input" id="email-search" placeholder="Search emails..." style="width: 240px;" oninput="debounceSearch()">
+    <select id="sender-filter" onchange="loadCurrentTab()">
+      <option value="">All senders</option>
+      {% for s in senders %}
+      <option value="{{ s.email }}">{{ s.display_name }}</option>
+      {% endfor %}
+    </select>
+    <span class="ml-auto text-dim text-sm" id="result-count"></span>
+  </div>
+
+  <!-- Table body -->
+  <div class="email-table-wrap" id="email-table-wrap">
+    <div class="inbox-loading" id="email-loading" style="display:none;">
+      <div class="spinner"></div>
+    </div>
+    <table id="email-table" style="display:none;">
+      <thead id="email-thead"></thead>
+      <tbody id="email-tbody"></tbody>
+    </table>
+    <div class="empty-state" id="email-empty" style="display:none;">
+      <div class="icon">&#9993;</div>
+      <p>No emails found</p>
+    </div>
+  </div>
+
+  <!-- Pagination -->
+  <div style="padding: 12px 20px; border-top: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center;" id="email-pagination-wrap" style="display:none;">
+    <span class="text-dim text-sm" id="page-info"></span>
+    <div class="flex gap-2">
+      <button class="btn btn-sm btn-ghost" id="btn-prev" onclick="changePage(-1)" disabled>Prev</button>
+      <button class="btn btn-sm btn-ghost" id="btn-next" onclick="changePage(1)" disabled>Next</button>
+    </div>
+  </div>
+</div>
+
+<!-- Slide-out preview panel -->
+<div class="email-preview-backdrop" id="preview-backdrop" onclick="closePreview()"></div>
+<div class="email-preview-panel" id="preview-panel">
+  <div class="email-preview-header">
+    <div style="flex:1; min-width:0;">
+      <div style="font-size: 16px; font-weight: 600;" id="preview-subject"></div>
+      <div class="email-preview-meta">
+        <div><strong>To:</strong> <span id="preview-to"></span></div>
+        <div><strong>From:</strong> <span id="preview-from"></span></div>
+        <div><strong>Status:</strong> <span id="preview-status"></span></div>
+        <div><strong>Touch:</strong> <span id="preview-touch"></span></div>
+        <div><strong>Opens:</strong> <span id="preview-opens"></span></div>
+      </div>
+    </div>
+    <button class="modal-close" onclick="closePreview()">&times;</button>
+  </div>
+  <div class="email-preview-body">
+    <iframe id="preview-iframe" sandbox="allow-same-origin"></iframe>
+  </div>
+  <div style="padding: 12px 20px; border-top: 1px solid var(--card-border); display: flex; gap: 8px;" id="preview-actions">
+    <button class="btn btn-sm btn-primary" id="btn-send-preview" onclick="sendFromPreview()" style="display:none;">Send Now</button>
+    <a class="btn btn-sm btn-ghost" id="btn-edit-preview" href="#" style="display:none;">Edit in Drafts</a>
+    <button class="btn btn-sm btn-ghost" id="btn-rerun-preview" onclick="rerunPipelineFromPreview()" style="display:none;">Re-run Pipeline</button>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentTab = 'sent';
+let currentPage = 1;
+const perPage = 50;
+let searchTimer = null;
+
+// Tab counts
+async function loadCounts() {
+  try {
+    const r = await fetch('/api/emails/stats');
+    const d = await r.json();
+    if (d.ok) {
+      document.getElementById('count-sent').textContent = d.stats.sent || 0;
+      document.getElementById('count-draft').textContent = d.stats.total - d.stats.sent - d.stats.bounced || 0;
+      document.getElementById('count-bounced').textContent = d.stats.bounced || 0;
+    }
+  } catch(e) {}
+  // Reply count
+  try {
+    const r = await fetch('/api/replies?limit=1');
+    const d = await r.json();
+    if (d.ok) document.getElementById('count-replies').textContent = d.replies.length;
+    // Do a full count
+    const r2 = await fetch('/api/replies?limit=500');
+    const d2 = await r2.json();
+    if (d2.ok) document.getElementById('count-replies').textContent = d2.replies.length;
+  } catch(e) {}
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  currentPage = 1;
+  document.querySelectorAll('.email-hub-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+  loadCurrentTab();
+}
+
+function debounceSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { currentPage = 1; loadCurrentTab(); }, 300);
+}
+
+function changePage(delta) {
+  currentPage += delta;
+  if (currentPage < 1) currentPage = 1;
+  loadCurrentTab();
+}
+
+async function loadCurrentTab() {
+  if (currentTab === 'replies') {
+    await loadReplies();
+    return;
+  }
+
+  const search = document.getElementById('email-search').value.trim();
+  const sender = document.getElementById('sender-filter').value;
+  const statusMap = { sent: 'sent', draft: 'draft', bounced: 'bounced' };
+  const status = statusMap[currentTab] || '';
+
+  showLoading(true);
+
+  try {
+    const params = new URLSearchParams({
+      status, page: currentPage, per_page: perPage,
+      sort_by: currentTab === 'sent' ? 'sent_at' : 'created_at',
+      sort_dir: 'desc'
+    });
+    if (search) params.set('search', search);
+    if (sender) params.set('sender', sender);
+
+    const r = await fetch(`/api/emails/list?${params}`);
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error);
+
+    renderEmailTable(d.emails, currentTab);
+    updatePagination(d.total, d.page, perPage);
+  } catch(e) {
+    console.error(e);
+    showEmpty(true);
+  }
+  showLoading(false);
+}
+
+async function loadReplies() {
+  showLoading(true);
+  try {
+    const r = await fetch('/api/replies?limit=200');
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error);
+    renderRepliesTable(d.replies);
+  } catch(e) {
+    console.error(e);
+    showEmpty(true);
+  }
+  showLoading(false);
+}
+
+function renderEmailTable(emails, tab) {
+  const thead = document.getElementById('email-thead');
+  const tbody = document.getElementById('email-tbody');
+  const table = document.getElementById('email-table');
+  const empty = document.getElementById('email-empty');
+
+  if (!emails.length) {
+    table.style.display = 'none';
+    empty.style.display = '';
+    return;
+  }
+  table.style.display = '';
+  empty.style.display = 'none';
+
+  // Build header based on tab
+  if (tab === 'sent') {
+    thead.innerHTML = '<tr><th>Company</th><th>To</th><th>Subject</th><th>Sender</th><th>Sent</th><th>Status</th></tr>';
+  } else if (tab === 'draft') {
+    thead.innerHTML = '<tr><th>Company</th><th>To</th><th>Subject</th><th>Created</th><th>Actions</th></tr>';
+  } else if (tab === 'bounced') {
+    thead.innerHTML = '<tr><th>Company</th><th>To</th><th>Subject</th><th>Sender</th><th>Date</th></tr>';
+  }
+
+  tbody.innerHTML = '';
+  emails.forEach(e => {
+    const tr = document.createElement('tr');
+    tr.className = 'email-row';
+    tr.onclick = () => openPreview(e.id, tab);
+
+    const company = e.lead_name || e.slug || '-';
+    const to = e.to_email || '-';
+    const subject = e.subject || '(no subject)';
+
+    if (tab === 'sent') {
+      const sender = (e.sender_account || '').split('@')[0] || '-';
+      const sent = e.sent_at ? new Date(e.sent_at).toLocaleDateString('en-US', {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '-';
+      const statusBadge = `<span class="badge badge-${e.status}">${e.status}</span>`;
+      tr.innerHTML = `<td style="font-weight:500">${esc(company)}</td><td class="text-dim">${esc(to)}</td><td>${esc(subject)}</td><td class="text-dim text-sm">${esc(sender)}</td><td class="text-dim text-sm">${sent}</td><td>${statusBadge}</td>`;
+    } else if (tab === 'draft') {
+      const created = e.created_at ? new Date(e.created_at).toLocaleDateString('en-US', {month:'short',day:'numeric'}) : '-';
+      tr.innerHTML = `<td style="font-weight:500">${esc(company)}</td><td class="text-dim">${esc(to)}</td><td>${esc(subject)}</td><td class="text-dim text-sm">${created}</td>
+        <td><button class="btn btn-sm btn-primary" onclick="event.stopPropagation();sendEmail('${e.id}',this)">Send</button></td>`;
+    } else if (tab === 'bounced') {
+      const sender = (e.sender_account || '').split('@')[0] || '-';
+      const dt = e.sent_at ? new Date(e.sent_at).toLocaleDateString('en-US', {month:'short',day:'numeric'}) : '-';
+      tr.innerHTML = `<td style="font-weight:500">${esc(company)}</td><td class="text-dim">${esc(to)}</td><td>${esc(subject)}</td><td class="text-dim text-sm">${esc(sender)}</td><td class="text-dim text-sm">${dt}</td>`;
+    }
+    tbody.appendChild(tr);
+  });
+}
+
+function renderRepliesTable(replies) {
+  const thead = document.getElementById('email-thead');
+  const tbody = document.getElementById('email-tbody');
+  const table = document.getElementById('email-table');
+  const empty = document.getElementById('email-empty');
+
+  if (!replies.length) {
+    table.style.display = 'none';
+    empty.style.display = '';
+    document.getElementById('result-count').textContent = '0 replies';
+    return;
+  }
+  table.style.display = '';
+  empty.style.display = 'none';
+  document.getElementById('result-count').textContent = replies.length + ' replies';
+
+  thead.innerHTML = '<tr><th>Company</th><th>From</th><th>Subject</th><th>Sentiment</th><th>Received</th></tr>';
+  tbody.innerHTML = '';
+  replies.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.className = 'email-row';
+    const company = r.lead_name || r.slug || '-';
+    const from = r.incoming_from || r.from_email || '-';
+    const subject = r.subject || '(no subject)';
+    const sentiment = r.sentiment || 'neutral';
+    const sentimentBadge = `<span class="badge sentiment-${sentiment}">${sentiment}</span>`;
+    const received = r.received_at ? new Date(r.received_at).toLocaleDateString('en-US', {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '-';
+    tr.innerHTML = `<td style="font-weight:500">${esc(company)}</td><td class="text-dim">${esc(from)}</td><td>${esc(subject)}</td><td>${sentimentBadge}</td><td class="text-dim text-sm">${received}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function updatePagination(total, page, pp) {
+  const totalPages = Math.ceil(total / pp);
+  document.getElementById('page-info').textContent = `Page ${page} of ${totalPages} (${total} emails)`;
+  document.getElementById('result-count').textContent = total + ' emails';
+  document.getElementById('btn-prev').disabled = page <= 1;
+  document.getElementById('btn-next').disabled = page >= totalPages;
+}
+
+function showLoading(on) {
+  document.getElementById('email-loading').style.display = on ? '' : 'none';
+  if (on) {
+    document.getElementById('email-table').style.display = 'none';
+    document.getElementById('email-empty').style.display = 'none';
+  }
+}
+function showEmpty(on) {
+  document.getElementById('email-empty').style.display = on ? '' : 'none';
+  document.getElementById('email-table').style.display = on ? 'none' : '';
+}
+
+// Preview panel
+async function openPreview(emailId, tab) {
+  try {
+    const r = await fetch(`/api/emails/${emailId}/preview`);
+    const d = await r.json();
+    document.getElementById('preview-subject').textContent = d.subject || '(no subject)';
+    document.getElementById('preview-to').textContent = d.to_email || '-';
+    document.getElementById('preview-from').textContent = d.slug || '-';
+    document.getElementById('preview-status').innerHTML = `<span class="badge badge-${d.status}">${d.status}</span>`;
+    document.getElementById('preview-touch').textContent = 'Touch ' + (d.touchpoint || 1);
+    document.getElementById('preview-opens').textContent = d.open_count || 0;
+    document.getElementById('preview-iframe').srcdoc = d.html || '<p style="padding:20px;color:#999;">No content</p>';
+
+    // Store slug for re-run button
+    document.getElementById('preview-panel').setAttribute('data-slug', d.slug || '');
+
+    // Show send/edit buttons only for drafts
+    document.getElementById('btn-send-preview').style.display = (d.status === 'draft') ? '' : 'none';
+    document.getElementById('btn-send-preview').setAttribute('data-id', emailId);
+    document.getElementById('btn-edit-preview').style.display = (d.status === 'draft') ? '' : 'none';
+    document.getElementById('btn-edit-preview').href = '/drafts';
+
+    // Show re-run button when email is tied to a lead (has slug)
+    document.getElementById('btn-rerun-preview').style.display = d.slug ? '' : 'none';
+
+    document.getElementById('preview-panel').classList.add('open');
+    document.getElementById('preview-backdrop').classList.add('open');
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+function closePreview() {
+  document.getElementById('preview-panel').classList.remove('open');
+  document.getElementById('preview-backdrop').classList.remove('open');
+}
+
+async function sendEmail(emailId, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch(`/api/emails/${emailId}/send`, { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      if (typeof showToast === 'function') showToast('Email sent!', 'success');
+      loadCurrentTab();
+    } else {
+      if (typeof showToast === 'function') showToast(d.error || 'Failed', 'error');
+    }
+  } catch(e) {
+    if (typeof showToast === 'function') showToast('Network error', 'error');
+  }
+  if (btn) btn.disabled = false;
+}
+
+function sendFromPreview() {
+  const id = document.getElementById('btn-send-preview').getAttribute('data-id');
+  if (id) sendEmail(id, document.getElementById('btn-send-preview'));
+}
+
+async function rerunPipelineFromPreview() {
+  const slug = document.getElementById('preview-panel').getAttribute('data-slug');
+  if (!slug) return;
+  if (!confirm(`Re-run the full pipeline for ${slug}? This will regenerate the spec site and emails.`)) return;
+
+  const btn = document.getElementById('btn-rerun-preview');
+  btn.disabled = true;
+  btn.textContent = 'Starting...';
+  try {
+    const r = await fetch('/api/pipeline/rerun', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({slug})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      if (typeof showToast === 'function') showToast(`Pipeline started for ${slug}`, 'success');
+      setTimeout(() => { window.location.href = '/pipeline'; }, 1000);
+    } else {
+      if (typeof showToast === 'function') showToast(d.error || 'Failed to start pipeline', 'error');
+    }
+  } catch(e) {
+    if (typeof showToast === 'function') showToast('Network error', 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Re-run Pipeline';
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// Key binding
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePreview(); });
+
+// Live KPI polling — refreshes open rate and other stats every 30s
+async function refreshKPIs() {
+  try {
+    const r = await fetch('/api/emails/stats');
+    const d = await r.json();
+    if (!d.ok) return;
+    const s = d.stats;
+    document.getElementById('kpi-sent').textContent = s.sent;
+    document.getElementById('kpi-sent-sub').textContent = s.total + ' total emails';
+    document.getElementById('kpi-open-rate').textContent = s.open_rate + '%';
+    document.getElementById('kpi-open-sub').textContent = s.opened + ' opened';
+    document.getElementById('kpi-reply-rate').textContent = s.reply_rate + '%';
+    document.getElementById('kpi-reply-sub').textContent = s.replied + ' replies';
+    document.getElementById('kpi-bounce-rate').textContent = s.bounce_rate + '%';
+    document.getElementById('kpi-bounce-sub').textContent = s.bounced + ' bounced';
+  } catch(e) {}
+}
+setInterval(refreshKPIs, 30000);
+
+// Init
+loadCounts();
+loadCurrentTab();
+</script>
+{% endblock %}

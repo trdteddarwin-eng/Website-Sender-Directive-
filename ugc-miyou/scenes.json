@@ -1,0 +1,37 @@
+[
+  {
+    "name": "hook",
+    "prompt": "Athletic muscular young Black man shirtless in jeans standing in a modern kitchen, turns toward camera with an excited surprised expression, slight hand gesture pointing at camera like he's about to show something amazing, natural handheld phone camera movement, warm golden indoor lighting, raw authentic UGC selfie video feel, casual vibes",
+    "duration": 5,
+    "voiceover": "Bro. You need to try this.",
+    "use_product": false
+  },
+  {
+    "name": "reveal",
+    "prompt": "Athletic muscular young Black man shirtless in jeans in kitchen, reaches behind him on the counter and picks up a beautiful red-pink liqueur bottle with a gold cap and ornate label, holds it up proudly toward the camera with a confident knowing smile, natural warm kitchen lighting, authentic phone video feel, casual energy",
+    "duration": 10,
+    "voiceover": "I just put everybody on to this grenadine. La Belle Miyou.",
+    "use_product": true
+  },
+  {
+    "name": "pour",
+    "prompt": "Athletic muscular young Black man in kitchen pours beautiful red-pink grenadine liqueur from a bottle into a clear glass with ice cubes on the counter, watching the gorgeous red liquid flow into the glass, the liquid catches the light beautifully, slight nod of appreciation, warm natural kitchen lighting, close medium shot, authentic phone video",
+    "duration": 10,
+    "voiceover": "Look at that color though. And it's not too sweet, that's what gets me.",
+    "use_product": true
+  },
+  {
+    "name": "taste",
+    "prompt": "Athletic muscular young Black man in kitchen takes a slow sip from a clear glass with red liquid, pauses for a moment, then nods his head approvingly with a genuine impressed smile, eyebrows raised in pleasant surprise, completely natural authentic reaction, warm lighting, phone camera angle",
+    "duration": 8,
+    "voiceover": "Mm. Yeah. That's different.",
+    "use_product": false
+  },
+  {
+    "name": "cta",
+    "prompt": "Athletic muscular young Black man in kitchen holds up a red-pink liqueur bottle toward the camera, gives a confident point at the camera and a knowing nod, slight smile, one last look at the bottle then back at camera, natural warm lighting, authentic casual energy, phone video UGC style",
+    "duration": 5,
+    "voiceover": "La Belle Miyou. Trust me, go get it.",
+    "use_product": true
+  }
+]

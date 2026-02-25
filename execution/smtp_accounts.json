@@ -51,7 +51,7 @@
       "username": "john@tedca.online",
       "password": "Charlested2003!",
       "display_name": "John",
-      "daily_limit": 50,
+      "daily_limit": 2,
       "provider": "titan",
       "active": true
     },
@@ -62,7 +62,7 @@
       "username": "patrick@tedca.online",
       "password": "Charlested2003!",
       "display_name": "Patrick",
-      "daily_limit": 50,
+      "daily_limit": 2,
       "provider": "titan",
       "active": true
     },
@@ -73,7 +73,7 @@
       "username": "ted@tedca.online",
       "password": "Charlested2003!",
       "display_name": "Ted",
-      "daily_limit": 50,
+      "daily_limit": 1,
       "provider": "titan",
       "active": true
     }

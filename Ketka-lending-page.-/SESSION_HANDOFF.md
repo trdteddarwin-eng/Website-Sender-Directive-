@@ -14,56 +14,77 @@ Read the file Ketka-lending-page.-/SESSION_HANDOFF.md for full context, then rea
 
 ## What This Project Is
 
-Tedca Corp landing page — a Vite + React + Tailwind CSS v4 site selling two AI services:
-1. **AI Voice Receptionist** — 24/7 phone answering, appointment booking
-2. **AI Automation Pipeline** — 4 AI agents (Researcher → Designer → Judge → Ops) that automate outreach
+Tedca Corp landing page — a Vite + React + Tailwind CSS v4 site selling three AI services:
+1. **AI Automation** — 6 automation cards (follow-up, lead scoring, chatbot, lead gen, email reply, WhatsApp) with flowchart modals
+2. **AI Voice Receptionist** — 24/7 phone answering, appointment booking
+3. **Agentic Workflows** — TikTok Video Creation + AI Outreach Pipeline with inline expand panels
 
-## What Was Just Done (This Session)
+## What Was Just Done (Latest Session — 2026-02-23)
 
-Restructured the entire landing page from a single-service (voice only) page to a dual-service page. Here's what changed:
+### Phase 1: Automation Tab Cleanup + Agentic Workflow Enhancements
 
-### New Page Structure (20 sections, ~3021 lines)
-1. Urgency Banner (updated — mentions both services)
-2. Navbar (updated — added "Services" link, "Book a Call" CTA)
-3. **NEW: Company Hero** — "AI Systems that run your business while you sleep" + dual CTAs + split visual
-4. **NEW: Services Overview** — Two side-by-side cards (Voice Receptionist | AI Automation)
-5. Social Proof (kept as-is)
-6. **NEW: Service 1 Anchor** — dark bar "Service 01 — AI Voice Receptionist"
-7. **NEW: Relocated Demo Form** — moved from old hero into its own section under Voice
-8. How It Works (kept — scoped under Voice)
-9. Pain Points (kept — scoped under Voice)
-10. **NEW: Service 2 Anchor** — dark bar "Service 02 — AI Automation Pipeline"
-11. **NEW: Pipeline Simulation** — animated dashboard showing 4 agents processing a lead in real-time (~34s animation, auto-plays on scroll via IntersectionObserver, loops with 3s pause)
-12. **NEW: Automation Benefits** — 3 cards (Personalized at Scale, Deployed in Minutes, 4 AI Agents)
-13. Integrations (kept)
-14. Human vs AI Comparison (kept)
-15. Timeline (kept, updated text)
-16. ROI Calculator (kept)
-17. Pricing (updated — tabbed: Voice AI plans | Automation plans)
-18. Book a Call (kept — Cal.com embed)
-19. FAQ (updated — added 4 automation questions)
-20. Footer + Sticky CTA (updated copy)
+1. **Removed 4 automation cards** — auto-invoice, lead-nurturing, ai-proposal, auto-crm (HTML + FLOWCHART_DATA entries)
+2. **Changed automation grid** from `md:grid-cols-4` → `md:grid-cols-3` (6 cards + Custom = 7 total)
+3. **Added green "sold" badges** to all 6 automation cards:
+   - WhatsApp: 312 | Lead Gen: 287 | Chatbot: 264 | Follow-Up: 241 | Lead Scoring: 198 | Email Reply: 176
+   - CSS class: `.auto-sold-badge` — green (#34C759) pill, absolute top-right
+4. **Added Website Email Pipeline card** to Agentic tab (replaced Coming Soon Card 1)
+   - "AI Outreach Pipeline" with 4-step mini workflow (Research → Design → Review → Deploy)
+   - Tech badges: Web Scraping, AI Design, Auto Deploy, Email Draft
+5. **Added click-to-expand inline "How It Works"** for agentic workflow cards
+   - `AGENTIC_DATA` object with `tiktok` (5 steps + 3 video embeds) and `website-pipeline` (4 steps)
+   - `toggleAgenticExpand(cardId)` — toggles expand/collapse, switches content
+   - `animateAgenticSteps()` — staggered reveal animation
+   - CSS: `.agentic-expand-panel` (grid-row animation), `.agentic-step`, `.agentic-video-row`
+6. **Copied 3 demo videos** to `videos/`:
+   - `speedtolead.mp4` (4.6 MB), `greengrow-ai-automation.mp4` (1.7 MB), `greengrow-brand-hero.mp4` (1.1 MB)
+   - Source: `yt-growth-chart/out/`
 
-### Pipeline Simulation Details
-- Vanilla JS engine (no GSAP) — ~200 lines in a self-executing function
-- Declarative TIMELINE array with 24 steps across 4 phases
-- Agent cards: 2x2 grid with Idle → Working (red pulse) → Done (green) states
-- Activity log: color-coded by agent, auto-scrolls
-- Output bar slides up on completion
-- IntersectionObserver at 30% threshold triggers auto-play
-- Pauses when scrolled out of view, restarts when visible again
+### Phase 2: Spline 3D Hero
 
-### Tailwind v4 Migration (Fixed)
-- `postcss.config.js` updated: `tailwindcss` → `@tailwindcss/postcss`
-- `index.css` rewritten: `@tailwind base/components/utilities` → `@import "tailwindcss"` + `@theme { }` block
-- Custom colors (paper, signal, offwhite, dark, success) defined in `@theme`
-- Custom fonts (heading, drama, mono, sans) defined in `@theme`
-- Custom animations (fadeInUp, fadeIn, scaleIn, shimmer, float) defined in `@theme`
+7. **Replaced hero right-side service cards** with interactive Spline 3D scene
+   - Uses `@splinetool/viewer` web component (v1.9.82 via unpkg CDN)
+   - Scene URL: `https://prod.spline.design/pR4jr0vesEcOOm-r/scene.splinecode`
+   - Container: 600px tall with negative margins for dramatic bleed effect
+   - **Color-shifted** via CSS `filter: hue-rotate(160deg) saturate(1.3) brightness(1.05)` to match site red (#E63B2E) accent
+   - **Locked in place** — `pointer-events: none` so mouse passes through (no drag/rotate)
+   - **Spline watermark hidden** — CSS `::part(logo)`, cover element, and shadow DOM JS removal
+   - Responsive: 400px on tablet, 320px on mobile
+
+### Git State
+- Both repos pushed and up to date:
+  - **Main workspace:** https://github.com/trdteddarwin-eng/Website-Sender-Directive-.git (main branch)
+  - **Ketka dedicated repo:** https://github.com/trdteddarwin-eng/Ketka-lending-page.-.git (main branch)
+- `execution/smtp_accounts.json` intentionally NOT committed (contains real passwords)
+
+## Page Structure (3 Tabs)
+
+### Tab 1: AI Automation
+- 6 automation cards + 1 "Request Custom" card in 3-column grid
+- Each card has green "sold" badge + flowchart modal on click
+- Flowchart modal: vertical pipeline with animated step-by-step reveal
+- Automation FAQ section below
+
+### Tab 2: AI Voice Receptionist
+- Demo form, How It Works, Pain Points, Industry cards
+- Human vs AI comparison, ROI calculator, Pricing
+
+### Tab 3: Agentic Workflows
+- TikTok Video Creation card (clickable → expands 5-step pipeline + 3 video embeds)
+- AI Outreach Pipeline card (clickable → expands 4-step pipeline)
+- Custom Workflows (Coming Soon) card
+- Inline expand panel between cards and Book a Call button
+- Pipeline Simulation engine (4 AI agents, 34s animation, auto-loops)
+
+### Hero Section
+- Left: Value prop headline + 3 CTA buttons (Automation, Voice AI, Agentic)
+- Right: Spline 3D scene (color-shifted, non-interactive, animated)
 
 ## Tech Stack
 - **Vite 6.4.1** — dev server
 - **Tailwind CSS 4.2.0** — via `@tailwindcss/postcss`
 - **React 19** — for the Gemini voice demo overlay (index.tsx)
+- **@splinetool/viewer 1.9.82** — 3D scene in hero (CDN)
 - **Font Awesome 6.4** — icons (CDN)
 - **Google Fonts** — Space Grotesk, DM Serif Display, Space Mono, Inter
 - **Cal.com** — embedded booking widget
@@ -76,24 +97,26 @@ npx vite --host
 ```
 
 ## Key Files
-- `index.html` — The full landing page (~3021 lines, all HTML + inline CSS + inline JS)
+- `index.html` — The full landing page (~3975 lines, all HTML + inline CSS + inline JS)
 - `index.css` — Tailwind v4 config + base styles
 - `index.tsx` — React app for voice demo overlay
+- `videos/` — 3 demo TikTok videos for agentic expand panel
 - `postcss.config.js` — PostCSS with @tailwindcss/postcss
-- `tailwind.config.ts` — OLD format (not used by TW v4, kept for reference)
 - `vite.config.ts` — Vite config with React plugin
 - `constants.ts` — System instructions for the Gemini voice AI
 
 ## Known State
-- All internal anchor links verified (6 anchors, all resolve)
-- HTML structure validated (no unclosed tags)
-- Vite serves cleanly with no build errors
-- The page was loading at localhost:3001 when session ended
+- All tabs switch correctly, flowchart modals open/close (X, Escape, backdrop)
+- Agentic expand panels toggle on card click, collapse on re-click
+- Spline 3D scene loads, animates, doesn't capture mouse
+- Pipeline simulation auto-plays when scrolled into view
+- Videos play inline with controls in TikTok expand section
+- Sold badges render on all 6 automation cards
 
 ## What Might Need Work Next
-- Mobile testing (375px, 414px, 768px viewports)
-- Pipeline simulation polish (timing tweaks, mobile layout)
-- Verify demo form still triggers React overlay in new location
-- Spotlight card mouse-follow effect may need pointer-events check
-- Performance check on pipeline animation (setTimeout chains)
+- Mobile testing (375px, 414px, 768px viewports) — especially Spline scene sizing
+- Verify Spline 3D color shift looks right on different monitors
+- TikTok video expand → videos may need poster frames for faster perceived load
+- Spline scene loading time — may want a skeleton/placeholder while it loads
+- The Spline hue-rotate is approximate — if user gets a new Spline scene with correct colors, can remove the filter
 ```

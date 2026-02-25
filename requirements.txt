@@ -16,7 +16,6 @@ pinecone-client
 # Web Scraping & Automation
 apify-client>=1.8.0
 beautifulsoup4>=4.12.0
-playwright>=1.49.0
 httpx>=0.28.0
 requests>=2.32.0
 html2text>=2024.2.0
@@ -26,13 +25,12 @@ pandas>=2.2.0
 Pillow>=11.0.0
 numpy>=1.26.0
 
-# Computer Vision (for thumbnail face matching)
-mediapipe>=0.10.0
-opencv-python>=4.9.0
-
 # Infrastructure
 modal>=0.73.0
 python-dotenv>=1.0.0
 
-# TikTok Avatar Pipeline (Higgsfield Motion Control)
-higgsfield-client>=0.1.0
+# Pipeline App (Flask dashboard + scheduler)
+flask>=3.0.0
+apscheduler>=3.10.0
+supabase>=2.0.0
+gunicorn>=21.2.0

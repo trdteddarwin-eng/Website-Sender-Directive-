@@ -1,9 +1,19 @@
-"""SMTP sender service — reusable HTML email sending with round-robin sender rotation."""
+"""SMTP sender service — reusable HTML email sending with round-robin sender rotation.
+
+Anti-spam measures baked in:
+- List-Unsubscribe header on every email (RFC 2369, Google requirement)
+- Plain-text alternative body (multipart/alternative improves deliverability)
+- Minimum 60s gap between sends from the same account (send throttling)
+- Unsubscribe footer injected into HTML if missing
+"""
 
 import os
+import re
 import sys
 import json
+import time
 import smtplib
+import html as html_mod
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formatdate, make_msgid
@@ -16,6 +26,61 @@ _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _PIPELINE_APP_DIR = os.path.dirname(_THIS_DIR)
 _WORKSPACE_ROOT = os.path.dirname(_PIPELINE_APP_DIR)
 SMTP_ACCOUNTS_PATH = os.path.join(_WORKSPACE_ROOT, "execution", "smtp_accounts.json")
+
+# Minimum seconds between sends from the same account
+MIN_SEND_GAP_SECONDS = 60
+
+# Track last send time per account (in-process only; resets on restart)
+_last_send_time = {}
+
+
+def _html_to_plain_text(html_body):
+    """Strip HTML to plain text for the text/plain alternative."""
+    text = re.sub(r'<style[^>]*>.*?</style>', '', html_body, flags=re.DOTALL)
+    text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL)
+    text = re.sub(r'<br\s*/?\s*>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</p>', '\n\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</div>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'<[^>]+>', '', text)
+    text = html_mod.unescape(text)
+    # Collapse whitespace but keep paragraph breaks
+    lines = [line.strip() for line in text.splitlines()]
+    text = '\n'.join(lines)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+def _ensure_unsubscribe_footer(html_body, unsub_mailto):
+    """Inject an unsubscribe link at the bottom of the HTML if one isn't already there."""
+    if 'unsubscribe' in html_body.lower():
+        return html_body  # Already has one
+    footer = (
+        '<div style="margin-top:30px;padding-top:12px;border-top:1px solid #eee;'
+        'font-size:11px;color:#999;text-align:center;">'
+        f'<a href="mailto:{unsub_mailto}?subject=Unsubscribe" '
+        'style="color:#999;text-decoration:underline;">Unsubscribe</a>'
+        '</div>'
+    )
+    # Insert before closing </body> or </html>, or just append
+    if '</body>' in html_body.lower():
+        html_body = re.sub(r'(</body>)', footer + r'\1', html_body, count=1, flags=re.IGNORECASE)
+    elif '</html>' in html_body.lower():
+        html_body = re.sub(r'(</html>)', footer + r'\1', html_body, count=1, flags=re.IGNORECASE)
+    else:
+        html_body += footer
+    return html_body
+
+
+def _throttle_send(account_email):
+    """Wait if needed to enforce minimum gap between sends from the same account."""
+    last = _last_send_time.get(account_email)
+    if last:
+        elapsed = time.time() - last
+        if elapsed < MIN_SEND_GAP_SECONDS:
+            wait = MIN_SEND_GAP_SECONDS - elapsed
+            print(f"[SMTP] Throttling {account_email} — waiting {wait:.0f}s")
+            time.sleep(wait)
+    _last_send_time[account_email] = time.time()
 
 
 def _load_all_accounts():
@@ -85,7 +150,7 @@ def get_next_sender(queue_date=None):
     return best
 
 
-def send_email_smtp(sender_account, to_email, subject, html_body, slug=None):
+def send_email_smtp(sender_account, to_email, subject, html_body, slug=None, email_id=None):
     """Send HTML email via SMTP from a specific @tedca.online account.
 
     If slug is provided and html_body contains cid: image references,
@@ -97,6 +162,7 @@ def send_email_smtp(sender_account, to_email, subject, html_body, slug=None):
         subject: email subject
         html_body: HTML email body
         slug: lead slug (for resolving screenshot paths)
+        email_id: email UUID (for open tracking pixel injection)
 
     Returns:
         {"message_id": str, "success": bool, "error": str|None}
@@ -111,16 +177,41 @@ def send_email_smtp(sender_account, to_email, subject, html_body, slug=None):
     else:
         acc = sender_account
 
+    # ── Anti-spam: throttle sends from same account ──
+    _throttle_send(acc["email"])
+
+    sender_domain = acc["email"].split("@")[1]
+    unsub_mailto = f"unsubscribe@{sender_domain}"
+
     msg = MIMEMultipart("related")
     msg["From"] = f"{acc.get('display_name', '')} <{acc['email']}>"
     msg["To"] = to_email
     msg["Subject"] = subject
     msg["Date"] = formatdate(localtime=True)
-    msg["Message-ID"] = make_msgid(domain=acc["email"].split("@")[1])
+    msg["Message-ID"] = make_msgid(domain=sender_domain)
 
-    # HTML body
-    html_part = MIMEText(html_body, "html", "utf-8")
-    msg.attach(html_part)
+    # ── Anti-spam: List-Unsubscribe header (RFC 2369, required by Google) ──
+    msg["List-Unsubscribe"] = f"<mailto:{unsub_mailto}?subject=Unsubscribe>"
+    msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
+
+    # Inject tracking pixel URL if email_id and tracker URL are configured
+    if email_id:
+        from config import TRACKER_BASE_URL
+        if TRACKER_BASE_URL:
+            tracking_url = f"{TRACKER_BASE_URL}/.netlify/functions/track?t={email_id}"
+            html_body = html_body.replace('src="cid:tracking-pixel"', f'src="{tracking_url}"')
+            print(f"[SMTP] Injected tracking pixel for email {email_id}")
+
+    # ── Anti-spam: ensure unsubscribe footer in HTML ──
+    html_body = _ensure_unsubscribe_footer(html_body, unsub_mailto)
+
+    # ── Anti-spam: multipart/alternative with plain-text + HTML ──
+    # Wrapping in alternative inside the related container so inline images work
+    alt_part = MIMEMultipart("alternative")
+    plain_text = _html_to_plain_text(html_body)
+    alt_part.attach(MIMEText(plain_text, "plain", "utf-8"))
+    alt_part.attach(MIMEText(html_body, "html", "utf-8"))
+    msg.attach(alt_part)
 
     # Attach inline screenshots if slug provided and CID refs exist
     if slug:

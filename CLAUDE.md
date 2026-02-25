@@ -261,3 +261,9 @@ Also, use Opus-4.5 for everything while building. It came out a few days ago and
 - **Why:** `.env` line 5 contains `ANTHROPIC_API_KEY=PASTE_YOUR_ANTHROPIC_API_KEY_HERE` — a literal placeholder, not a real key.
 - **Fix:** Switched classifier to use OpenRouter API (key is valid). Updated `classifier.py` to use `requests` + OpenRouter instead of `anthropic` SDK.
 - **Rule:** All AI scoring/classification uses OpenRouter (`OPENROUTER_API_KEY`), not the Anthropic SDK directly. This avoids the missing Anthropic key issue.
+
+### [2026-02-25] Google API key leaked via hardcoded fallback in os.getenv()
+- **What happened:** Google flagged the API key as leaked with `PERMISSION_DENIED: Your API key was reported as leaked`. Gemini TTS calls failed.
+- **Why:** `generate_ads_music.py` and `generate_background_music.py` used `os.getenv("GOOGLE_API_KEY", "AIzaSy...")` with the real key as the default fallback. These files were committed and pushed to a public GitHub repo. Google scans public repos and auto-revokes leaked keys.
+- **Fix:** Removed hardcoded keys from both files (replaced with empty string fallback). Added a pre-commit git hook (`.git/hooks/pre-commit`) that scans staged files for API key patterns (`AIzaSy`, `sk-`, `AKIA`, `ghp_`, `xai-`) and blocks the commit.
+- **Rule:** **NEVER put API keys as default values in `os.getenv()`.** Always use `os.getenv("KEY_NAME", "")`. All secrets live in `.env` (gitignored). The pre-commit hook will catch violations, but don't rely on it — just never hardcode keys.

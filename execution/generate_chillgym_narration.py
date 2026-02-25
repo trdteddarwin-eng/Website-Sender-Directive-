@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-Generate narration audio for AI Chatbot video using ElevenLabs TTS.
+Generate narration audio for ChillGym video using ElevenLabs TTS.
+
+Uses calmer voice settings (high stability, no style exaggeration)
+for a zen, meditative tone.
 
 Usage:
-  python execution/generate_chatbot_narration.py
+  python execution/generate_chillgym_narration.py
 
 Output:
-  yt-growth-chart/public/narration-chatbot/scene_00.mp3 ... scene_14.mp3
+  yt-growth-chart/public/narration-chillgym/scene_00.mp3 ... scene_04.mp3
 """
 
 import os
@@ -14,34 +17,24 @@ import time
 import requests
 
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "sk_19970146a3f8d3964e93feb3aff4acb54b2732be03e2cf5c")
-OUTPUT_DIR = "yt-growth-chart/public/narration-chatbot"
+OUTPUT_DIR = "yt-growth-chart/public/narration-chillgym"
 
-# Voice: Roger (CwhRBWXzGAHq8TQ4Fs17)
+# Voice: Roger (CwhRBWXzGAHq8TQ4Fs17) — deep, calm male voice
 VOICE_ID = "CwhRBWXzGAHq8TQ4Fs17"
 MODEL_ID = "eleven_multilingual_v2"
 
-# Scene narration texts (speakable — no special characters, numbers spelled out)
+# Scene narration — short, meditative, speakable
 SCENES = [
-    "Your customers are waiting for a reply",
-    "Average response time? Twelve hours.",
-    "Sixty percent of customers won't wait that long",
-    "Bad support kills repeat business",
-    "What if AI answered every ticket instantly?",
-    "It reads the message. Understands the intent.",
-    "Pulls the right answer from your knowledge base",
-    "Resolves eighty percent of tickets automatically",
-    "Escalates complex issues to your team",
-    "Customers get answers in under thirty seconds",
-    "Works in every language across all channels",
-    "Handles thousands of tickets simultaneously",
-    "Your competitors already have this running",
-    "Every unanswered ticket is a lost customer",
-    "DM chatbot to get your AI support agent",
+    "The iron doesn't care about your excuses.",
+    "One rep at a time. One day at a time.",
+    "Discipline is choosing between what you want now, and what you want most.",
+    "Your body hears everything your mind says.",
+    "Show up. Every single day.",
 ]
 
 
 def generate_scene_audio(text, output_path):
-    """Generate TTS audio for a single scene."""
+    """Generate TTS audio for a single scene with calm voice settings."""
     resp = requests.post(
         f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}",
         headers={
@@ -52,9 +45,9 @@ def generate_scene_audio(text, output_path):
             "text": text,
             "model_id": MODEL_ID,
             "voice_settings": {
-                "stability": 0.6,
+                "stability": 0.85,       # high stability = calm, steady
                 "similarity_boost": 0.75,
-                "style": 0.3,
+                "style": 0.0,            # no style exaggeration = natural
             },
         },
         timeout=60,
@@ -70,9 +63,10 @@ def generate_scene_audio(text, output_path):
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    print(f"Generating narration for {len(SCENES)} scenes using Roger voice...")
+    print(f"Generating narration for {len(SCENES)} scenes using Roger voice (calm mode)...")
     print(f"Voice ID: {VOICE_ID}")
-    print(f"Model: {MODEL_ID}\n")
+    print(f"Model: {MODEL_ID}")
+    print(f"Settings: stability=0.85, style=0.0 (zen mode)\n")
 
     for i, text in enumerate(SCENES):
         output_path = os.path.join(OUTPUT_DIR, f"scene_{i:02d}.mp3")

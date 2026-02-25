@@ -168,7 +168,8 @@ def _send_queue_item(item):
     subject = email.get("subject", "")
     html_body = email.get("html_content", "")
 
-    result = send_email_smtp(sender, to_email, subject, html_body)
+    email_id = item.get("email_id")
+    result = send_email_smtp(sender, to_email, subject, html_body, slug=item.get("slug"), email_id=email_id)
 
     now = datetime.utcnow().isoformat()
 
@@ -178,12 +179,19 @@ def _send_queue_item(item):
             "approved_at": now,
             "sent_at": now,
         })
-        db.update_email(item["email_id"], {
+
+        from config import TRACKER_BASE_URL
+        tracking_url = f"{TRACKER_BASE_URL}/.netlify/functions/track?t={email_id}" if TRACKER_BASE_URL and email_id else None
+
+        update_fields = {
             "status": "sent",
             "sent_at": now,
             "sender_account": sender,
             "sent_via": "smtp",
-        })
+        }
+        if tracking_url:
+            update_fields["tracking_pixel_url"] = tracking_url
+        db.update_email(email_id, update_fields)
 
         # Advance sequence
         seq = db.get_sequence_by_slug(item.get("slug", ""))

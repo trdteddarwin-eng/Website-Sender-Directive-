@@ -34,17 +34,20 @@ Apify Scraper → Sonnet Classifier → Deliverable Builder → Opus Cover Lette
 
 ## Pipeline Phases
 
-### Phase 1: Scrape + Filter (free)
+### Phase 1: Scrape + Filter (~$0.15/run)
 
-1. Apify `clockworks/tiktok-scraper` (or Upwork-specific actor) scrapes **9 keywords x 50 jobs each** = up to 450 raw jobs
-2. Dedup against Supabase via `tracker.check_already_applied(job_id)`
-3. Apply deterministic filters from `config.json`:
-   - `max_connects_cost`: 4 (keeps cost per apply low)
-   - `min_fixed_budget`: $500+ fixed-price / `min_hourly_rate`: $25+ hourly
-   - `max_proposals`: 15 (skip saturated jobs)
-   - `experience_levels`: intermediate, expert only
+1. Apify `flash_mage~upwork` actor ($0.003/result + $0.001 start) scrapes with **server-side filters**:
+   - Keywords searched in title/description/skills (all 9 keywords in 1 run)
+   - `experienceLevel`: intermediate, expert
+   - `connectsMax`: 16
+   - `minBudget`, `hourlyRate` filters
+2. Single run returns only pre-filtered, relevant jobs
+3. Dedup against local seen-jobs file + Supabase via `tracker.check_already_applied(job_id)`
+4. Any remaining local filters (budget edge cases)
 
-**Expected output:** ~30-80 jobs after dedup + filtering.
+**Cost:** ~$0.05-0.15 per run (only pay for matching results)
+**Budget cap:** $0.50 max per pipeline run (enforced in code)
+**Expected output:** ~10-30 relevant jobs per run.
 
 ### Phase 2: AI Score + Classify (~$0.003/job)
 

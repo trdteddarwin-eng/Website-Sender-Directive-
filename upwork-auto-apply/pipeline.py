@@ -36,7 +36,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'execution'))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # execution/ imports
-from upwork_apify_scraper import scrape_upwork_jobs, filter_jobs, format_job
+from upwork_apify_scraper import scrape_upwork_jobs, filter_jobs, format_job, keyword_match
 
 # sibling imports
 from classifier import score_and_classify_batch
@@ -147,36 +147,39 @@ def phase1_scrape_and_filter(config):
     keywords = config["keywords"]
     scraper = config.get("scraper", {})
     filters = config.get("filters", {})
-    limit = scraper.get("limit_per_keyword", 50) * len(keywords)  # total budget
-    limit = min(limit, 200)  # cap at 200 to control cost
+    limit = scraper.get("limit_per_keyword", 50)  # total jobs to fetch
     days = scraper.get("days", 1)
+    job_categories = scraper.get("job_categories", [
+        "All - Web, Mobile & Software Dev",
+        "All - IT & Networking",
+        "All - Data Science & Analytics",
+        "AI & Machine Learning",
+        "AI Apps & Integration",
+    ])
 
     print("\n" + "=" * 60)
     print("PHASE 1: Scrape + Filter")
     print("=" * 60)
 
-    from_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
-
     # Load seen-jobs file for cross-run dedup
     seen_jobs = _load_seen_jobs()
     print(f"  Seen-jobs store: {len(seen_jobs)} previously seen")
 
-    # --- Single Apify run with server-side keyword + budget filtering ---
-    # This sends ALL keywords in one call (~$0.15) instead of per-keyword ($0.15 each)
-    print(f"\n  Scraping with server-side filters (1 run, ~$0.15)")
+    # --- Single Apify run with jobCategories server-side filter ---
+    # Actor: upwork-vibe~upwork-job-scraper (FREE tier)
+    # Only jobCategories works server-side; all other filtering is local
+    print(f"\n  Scraping with upwork-vibe actor (FREE, jobCategories filter)")
     try:
         raw_jobs = scrape_upwork_jobs(
             limit=limit,
-            from_date=from_date,
             keywords=keywords,
-            experience_levels=filters.get("experience_levels"),
-            max_connects_cost=filters.get("max_connects_cost"),
+            job_categories=job_categories,
         )
     except Exception as e:
         print(f"  Scrape failed: {e}")
         raw_jobs = []
 
-    # Format all returned jobs (already keyword-filtered by Apify)
+    # Format all returned jobs (need local keyword filtering)
     all_jobs = [format_job(j) for j in raw_jobs]
     total_scraped = len(all_jobs)
     print(f"\n  Total jobs from Apify (pre-filtered): {total_scraped}")
@@ -213,6 +216,13 @@ def phase1_scrape_and_filter(config):
             print(f"    Warning: Supabase check failed for {job['id']}: {e}")
         not_applied.append(job)
     print(f"  New (not already applied): {len(not_applied)}")
+
+    # --- Local keyword filter (upwork-vibe doesn't filter keywords server-side) ---
+    if keywords:
+        keyword_matched = [j for j in not_applied if keyword_match(j, keywords)]
+        print(f"  After keyword filter ({', '.join(keywords[:5])}{'...' if len(keywords) > 5 else ''}): "
+              f"{len(keyword_matched)} of {len(not_applied)}")
+        not_applied = keyword_matched
 
     # --- Apply deterministic filters ---
     max_connects = filters.get("max_connects_cost", 4)

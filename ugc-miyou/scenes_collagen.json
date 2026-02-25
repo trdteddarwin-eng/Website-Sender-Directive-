@@ -1,0 +1,23 @@
+[
+  {
+    "name": "hook_gym",
+    "prompt": "Athletic muscular young Black man standing in a modern gym near a weight rack, wearing workout shorts, turns toward camera with a confident knowing expression, slight head nod, gym equipment in background, overhead fluorescent lighting, raw authentic phone video UGC feel",
+    "voiceover": "This is what I take every single day.",
+    "duration": 5,
+    "mode": "pro"
+  },
+  {
+    "name": "workout_curls",
+    "prompt": "Athletic muscular young Black man doing heavy dumbbell curls in a gym, focused intense expression, controlled powerful movements, sweat on skin, weight rack and gym mirrors in background, overhead lighting, authentic workout video feel",
+    "voiceover": "20 grams of collagen per scoop. Hair, skin, nails, joints. All of it.",
+    "duration": 10,
+    "mode": "std"
+  },
+  {
+    "name": "product_cta",
+    "prompt": "Athletic muscular young Black man in gym picks up a shaker bottle, scoops white protein powder from a blue supplement container, pours it into shaker bottle, shakes it, takes a drink, nods approvingly at camera, gym setting, natural lighting, authentic UGC",
+    "voiceover": "Just throw a scoop in your shake. No taste, no texture. Grass-fed collagen. NeoCell. Link's in bio.",
+    "duration": 10,
+    "mode": "pro"
+  }
+]

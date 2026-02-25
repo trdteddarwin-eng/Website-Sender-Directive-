@@ -18,7 +18,7 @@ import tempfile
 from google import genai
 from google.genai import types
 
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "AIzaSyB3IjWUNLAz90Hk_VTuOrT-8OxrU3h_jE8")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 OUTPUT_PATH = "tiktok-recreation/public/background-music-ads.mp3"
 TARGET_DURATION_S = 42  # slightly longer than ~35s video to avoid cutoff
 

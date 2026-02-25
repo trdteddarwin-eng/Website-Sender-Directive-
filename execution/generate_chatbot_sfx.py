@@ -6,31 +6,32 @@ Usage:
   python execution/generate_chatbot_sfx.py
 
 Output:
-  tiktok-recreation/public/sfx-chatbot/sfx_00.mp3 ... sfx_14.mp3
+  yt-growth-chart/public/sfx-chatbot/sfx_00.wav ... sfx_14.wav
 """
 
 import os
 import time
 from replicate_sfx import generate_sfx
-OUTPUT_DIR = "tiktok-recreation/public/sfx-chatbot"
+
+OUTPUT_DIR = "yt-growth-chart/public/sfx-chatbot"
 
 # Per-scene SFX prompts matched to AI Chatbot video scenes
 SFX_SCENES = [
-    {"prompt": "frustrated waiting sound with ticking clock, impatient notification dings fading", "duration": 2.5},
-    {"prompt": "urgent stopwatch ticking with pressure building, time sensitive alarm", "duration": 2.5},
-    {"prompt": "overlapping phone rings and notification sounds, overwhelmed chaos buzzing", "duration": 2.5},
-    {"prompt": "door slamming shut with footsteps walking away, customer lost, departure", "duration": 2.5},
-    {"prompt": "coins and money whooshing away into distance, financial loss fading", "duration": 2.5},
-    {"prompt": "instant message pop with bright confirmation chime, fast and clean response", "duration": 2.5},
-    {"prompt": "satisfying progress bar filling up with achievement unlock sound, completion", "duration": 2.5},
-    {"prompt": "triple checkmark stamps in quick succession, organized and efficient clicks", "duration": 2.5},
-    {"prompt": "smooth routing swoosh with connection established tone, transfer complete", "duration": 2.5},
-    {"prompt": "digital neural network growing with soft electronic pulses, intelligence expanding", "duration": 2.5},
-    {"prompt": "rapid fire message notification pings, many simultaneous, powerful and busy", "duration": 2.5},
-    {"prompt": "steady powerful engine humming continuously, reliable and tireless machine", "duration": 2.5},
-    {"prompt": "downward slide with positive savings chime, cost reduction celebration", "duration": 2.5},
-    {"prompt": "competitive racing swooshes accelerating ahead, robots rushing forward fast", "duration": 2.5},
-    {"prompt": "chat bubble pop with sparkle activation sound, ready to engage, bright", "duration": 2.5},
+    {"prompt": "chat notification bubble pop sound with waiting ambient", "duration": 3},
+    {"prompt": "clock ticking slowly with heavy dramatic weight, time passing", "duration": 3},
+    {"prompt": "crowd footsteps walking away and fading into distance, abandonment", "duration": 3},
+    {"prompt": "heart monitor beeping slowing to flatline with dramatic tension", "duration": 3},
+    {"prompt": "electric lightning strike with digital mail sorting whoosh sounds", "duration": 3},
+    {"prompt": "scanning laser beam reading documents with electronic parsing beeps", "duration": 3},
+    {"prompt": "database search query with successful retrieval chime ascending", "duration": 3},
+    {"prompt": "rapid paper shuffling with multiple stamp sounds, efficient processing", "duration": 3},
+    {"prompt": "smooth handoff relay baton pass with collaborative chime", "duration": 3},
+    {"prompt": "stopwatch clicking then triumphant success chime, fast completion", "duration": 3},
+    {"prompt": "globe spinning with multilingual whispers and channel switching clicks", "duration": 3},
+    {"prompt": "rapid fire keyboard typing with parallel processing electronic hum", "duration": 3},
+    {"prompt": "competitor racing ahead swoosh while stuck engine sputters behind", "duration": 3},
+    {"prompt": "people fading away with coins dropping and echo, customer loss", "duration": 3},
+    {"prompt": "rocket engine ignition building to liftoff with ascending sparkle", "duration": 3},
 ]
 
 
@@ -41,7 +42,7 @@ def main():
     print(f"Output: {OUTPUT_DIR}/\n")
 
     for i, scene in enumerate(SFX_SCENES):
-        output_path = os.path.join(OUTPUT_DIR, f"sfx_{i:02d}.mp3")
+        output_path = os.path.join(OUTPUT_DIR, f"sfx_{i:02d}.wav")
 
         if os.path.exists(output_path):
             print(f"  Scene {i:2d}: already exists, skipping")
@@ -55,9 +56,9 @@ def main():
             print(f" FAILED: {e}")
             continue
 
-        time.sleep(1.0)
+        time.sleep(12.0)  # rate limit: 6 req/min with <$5 credit
 
-    generated = [f for f in os.listdir(OUTPUT_DIR) if f.endswith(".mp3")]
+    generated = [f for f in os.listdir(OUTPUT_DIR) if f.endswith(".wav")]
     print(f"\nDone! Generated {len(generated)}/{len(SFX_SCENES)} SFX files in {OUTPUT_DIR}/")
 
 

@@ -27,6 +27,9 @@ NETLIFY_SITE_ID = os.getenv("NETLIFY_SITE_ID", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 SECRET_KEY = os.getenv("SECRET_KEY", "")
 
+# Email open tracking (Netlify Function)
+TRACKER_BASE_URL = os.getenv("TRACKER_BASE_URL", "")
+
 # Gmail
 GMAIL_TOKEN_PATH = os.path.join(WORKSPACE_ROOT, "gmail_token.json")
 GMAIL_CREDS_PATH = os.path.join(WORKSPACE_ROOT, "gmail_credentials.json")

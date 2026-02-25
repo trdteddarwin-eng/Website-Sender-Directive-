@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% block title %}Senders — TedCA Pipeline{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<style>
+  .sender-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .sender-card {
+    background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius-lg);
+    padding: 20px; position: relative;
+  }
+  .sender-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+  .sender-avatar {
+    width: 40px; height: 40px; border-radius: 50%; background: #f5f5f7; color: #1d1d1f;
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; flex-shrink: 0;
+  }
+  .sender-info { margin-left: 12px; flex: 1; }
+  .sender-name { font-weight: 600; font-size: 14px; }
+  .sender-email { font-size: 12px; color: var(--text-dim); font-family: var(--mono); }
+
+  .usage-bar-wrap { margin: 12px 0; }
+  .usage-bar-bg { height: 6px; background: var(--bg-raised); border-radius: 3px; overflow: hidden; }
+  .usage-bar-fill { height: 100%; border-radius: 3px; background: #1d1d1f; transition: width .3s; }
+  .usage-bar-fill.warn { background: var(--orange); }
+  .usage-bar-fill.full { background: var(--red); }
+  .usage-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+  .sender-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 14px; }
+  .sender-stat { text-align: center; }
+  .sender-stat-value { font-size: 18px; font-weight: 700; line-height: 1; }
+  .sender-stat-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.3px; margin-top: 2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Sender Accounts</h2>
+    <div class="subtitle">Email account health and sending performance</div>
+  </div>
+</div>
+
+<!-- KPI Row -->
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="kpi-label">Active Accounts</div>
+    <div class="kpi-value">{{ sender_cards|length }}</div>
+    <div class="kpi-sub">@tedca.online</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Sent Today</div>
+    <div class="kpi-value">{{ total_sent_today }}</div>
+    <div class="kpi-sub">of {{ daily_limit }} daily cap</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Remaining Today</div>
+    <div class="kpi-value">{{ remaining }}</div>
+    <div class="kpi-sub">emails left</div>
+  </div>
+</div>
+
+<!-- Account Cards -->
+<div class="sender-grid">
+  {% for s in sender_cards %}
+  <div class="sender-card">
+    <div class="sender-card-header">
+      <div style="display:flex; align-items:center;">
+        <div class="sender-avatar">{{ s.display_name[0] if s.display_name else s.email[0]|upper }}</div>
+        <div class="sender-info">
+          <div class="sender-name">{{ s.display_name or s.email.split('@')[0] }}</div>
+          <div class="sender-email">{{ s.email }}</div>
+        </div>
+      </div>
+      {% if s.sent_today >= s.daily_limit %}
+      <span class="badge badge-failed">AT LIMIT</span>
+      {% else %}
+      <span class="badge badge-active">ACTIVE</span>
+      {% endif %}
+    </div>
+
+    <div class="usage-bar-wrap">
+      {% set pct = (s.sent_today / s.daily_limit * 100) if s.daily_limit else 0 %}
+      <div class="usage-bar-bg">
+        <div class="usage-bar-fill {% if pct >= 100 %}full{% elif pct >= 80 %}warn{% endif %}" style="width: {{ [pct, 100]|min }}%;"></div>
+      </div>
+      <div class="usage-label">
+        <span>{{ s.sent_today }} / {{ s.daily_limit }} today</span>
+        <span>{{ s.daily_limit - s.sent_today }} remaining</span>
+      </div>
+    </div>
+
+    <div class="sender-stats">
+      <div class="sender-stat">
+        <div class="sender-stat-value">{{ s.total_sent }}</div>
+        <div class="sender-stat-label">Total Sent</div>
+      </div>
+      <div class="sender-stat">
+        <div class="sender-stat-value">{{ s.open_rate }}%</div>
+        <div class="sender-stat-label">Open Rate</div>
+      </div>
+      <div class="sender-stat">
+        <div class="sender-stat-value">{{ s.reply_rate }}%</div>
+        <div class="sender-stat-label">Reply Rate</div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Charts -->
+<div class="grid-2 mb-6">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Daily Sends by Account</div>
+    </div>
+    <div class="chart-container">
+      <canvas id="daily-sends-chart"></canvas>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Performance Comparison</div>
+    </div>
+    <div class="chart-container">
+      <canvas id="perf-chart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Sends -->
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Recent Sends</div>
+  </div>
+  <div class="table-container" style="border:none;">
+    <table>
+      <thead>
+        <tr><th>Sender</th><th>Recipient</th><th>Subject</th><th>Status</th><th>Sent</th></tr>
+      </thead>
+      <tbody id="recent-sends-body">
+        <tr><td colspan="5" class="text-dim" style="text-align:center; padding:30px;">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const chartColors = ['#1d1d1f', '#86868b', '#aeaeb2'];
+
+// Load daily sends chart
+async function loadDailyChart() {
+  try {
+    const r = await fetch('/api/senders/daily-history?days=30');
+    const d = await r.json();
+    if (!d.ok) return;
+
+    const history = d.history;
+    const dates = Object.keys(history).sort();
+    // Collect all senders
+    const senderSet = new Set();
+    dates.forEach(dt => Object.keys(history[dt]).forEach(s => senderSet.add(s)));
+    const senders = [...senderSet];
+
+    const datasets = senders.map((s, i) => ({
+      label: s.split('@')[0],
+      data: dates.map(dt => (history[dt] || {})[s] || 0),
+      backgroundColor: chartColors[i % chartColors.length],
+      borderRadius: 3,
+    }));
+
+    new Chart(document.getElementById('daily-sends-chart'), {
+      type: 'bar',
+      data: { labels: dates.map(d => d.slice(5)), datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } },
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { font: { size: 10 } } },
+          y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1, font: { size: 10 } }, grid: { color: '#f0f0f0' } }
+        }
+      }
+    });
+  } catch(e) { console.error(e); }
+}
+
+// Load performance comparison chart
+async function loadPerfChart() {
+  try {
+    const r = await fetch('/api/senders/performance');
+    const d = await r.json();
+    if (!d.ok) return;
+
+    const perf = d.performance;
+    const accounts = Object.keys(perf);
+    const labels = accounts.map(a => a.split('@')[0]);
+
+    new Chart(document.getElementById('perf-chart'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Open Rate %', data: accounts.map(a => perf[a].open_rate), backgroundColor: '#1d1d1f', borderRadius: 3 },
+          { label: 'Reply Rate %', data: accounts.map(a => perf[a].reply_rate), backgroundColor: '#aeaeb2', borderRadius: 3 },
+        ]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } },
+        scales: {
+          x: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' }, ticks: { font: { size: 10 }, callback: v => v + '%' } },
+          y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+        }
+      }
+    });
+  } catch(e) { console.error(e); }
+}
+
+// Load recent sends table
+async function loadRecentSends() {
+  try {
+    const r = await fetch('/api/emails/list?status=sent&per_page=30&sort_by=sent_at&sort_dir=desc');
+    const d = await r.json();
+    if (!d.ok) return;
+
+    const tbody = document.getElementById('recent-sends-body');
+    if (!d.emails.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-dim" style="text-align:center; padding:30px;">No emails sent yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = '';
+    d.emails.forEach(e => {
+      const sender = (e.sender_account || '').split('@')[0] || '-';
+      const to = e.to_email || '-';
+      const subject = e.subject || '(no subject)';
+      const badge = `<span class="badge badge-${e.status}">${e.status}</span>`;
+      const sent = e.sent_at ? new Date(e.sent_at).toLocaleDateString('en-US', {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '-';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td class="text-sm">${esc(sender)}</td><td class="text-dim">${esc(to)}</td><td>${esc(subject)}</td><td>${badge}</td><td class="text-dim text-sm">${sent}</td>`;
+      tbody.appendChild(tr);
+    });
+  } catch(e) { console.error(e); }
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// Init
+loadDailyChart();
+loadPerfChart();
+loadRecentSends();
+</script>
+{% endblock %}

@@ -192,7 +192,7 @@ def process_new_email(account_email, uid, from_email, subject):
         sentiment = "neutral"  # Force to draft
 
     # Decide: send or draft
-    if sentiment == "positive" and reply_body:
+    if sentiment in ("positive", "neutral", "negative") and reply_body:
         # Auto-send immediately
         try:
             send_reply_smtp(
@@ -274,6 +274,10 @@ def send_reply_smtp(account_obj, to_email, subject, body, in_reply_to_msgid=None
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid(domain=account_obj["email"].split("@")[1])
 
+    sender_domain = account_obj["email"].split("@")[1]
+    msg["List-Unsubscribe"] = f"<mailto:unsubscribe@{sender_domain}?subject=Unsubscribe>"
+    msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
+
     if in_reply_to_msgid:
         msg["In-Reply-To"] = in_reply_to_msgid
         msg["References"] = in_reply_to_msgid
@@ -281,7 +285,7 @@ def send_reply_smtp(account_obj, to_email, subject, body, in_reply_to_msgid=None
     smtp_host = account_obj.get("smtp_host", "mail.privateemail.com")
     smtp_port = account_obj.get("smtp_port", 587)
 
-    with smtplib.SMTP(smtp_host, smtp_port) as server:
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
         server.starttls()
         server.login(account_obj["username"], account_obj["password"])
         server.send_message(msg)

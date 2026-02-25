@@ -784,6 +784,64 @@ def get_daily_send_counts(days=30):
     return daily
 
 
+# ── Email Hub Queries ────────────────────────────────
+
+def get_all_emails(status=None, search=None, sender=None, sort_by="created_at",
+                   sort_dir="desc", page=1, per_page=50):
+    """Paginated email listing with filters."""
+    sb = _get_client()
+    query = sb.table("emails").select("*", count="exact")
+    if status:
+        query = query.eq("status", status)
+    if sender:
+        query = query.eq("sender_account", sender)
+    if search:
+        s = f"%{search}%"
+        query = query.or_(f"subject.ilike.{s},to_email.ilike.{s},slug.ilike.{s}")
+    desc = sort_dir == "desc"
+    query = query.order(sort_by, desc=desc)
+    offset = (page - 1) * per_page
+    query = query.range(offset, offset + per_page - 1)
+    result = query.execute()
+    return result.data or [], result.count if result.count is not None else len(result.data or [])
+
+
+def get_all_replies(sentiment=None, limit=100):
+    """All replies with optional sentiment filter."""
+    sb = _get_client()
+    query = sb.table("replies").select("*")
+    if sentiment:
+        query = query.eq("sentiment", sentiment)
+    query = query.order("received_at", desc=True).limit(limit)
+    result = query.execute()
+    return result.data or []
+
+
+def get_bounced_emails(limit=100):
+    """Emails with status='bounced'."""
+    sb = _get_client()
+    result = (
+        sb.table("emails")
+        .select("*")
+        .eq("status", "bounced")
+        .order("sent_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return result.data or []
+
+
+def get_recent_sent_emails(sender=None, limit=50):
+    """Recent sent emails with optional sender filter."""
+    sb = _get_client()
+    query = sb.table("emails").select("*").in_("status", ["sent", "opened", "replied"])
+    if sender:
+        query = query.eq("sender_account", sender)
+    query = query.order("sent_at", desc=True).limit(limit)
+    result = query.execute()
+    return result.data or []
+
+
 # ── Dashboard Aggregates ─────────────────────────────
 
 def get_pipeline_throughput(days=30):

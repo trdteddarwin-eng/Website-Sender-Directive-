@@ -51,6 +51,35 @@ def resume_pipeline():
         return jsonify({"error": str(e)}), 500
 
 
+@api_bp.route("/api/pipeline/rerun", methods=["POST"])
+def rerun_pipeline():
+    """Reset a lead's pipeline status and start a fresh run."""
+    data = request.get_json(silent=True) or {}
+    slug = data.get("slug")
+    if not slug:
+        return jsonify({"error": "slug is required"}), 400
+
+    lead = db.get_lead_by_slug(slug)
+    if not lead:
+        return jsonify({"error": "Lead not found"}), 404
+
+    # Check no pipeline is currently running for this lead
+    active = db.get_active_pipeline_run()
+    if active and active.get("slug") == slug:
+        return jsonify({"error": "Pipeline is already running for this lead"}), 409
+
+    try:
+        # Reset status to pending so start_pipeline picks it up cleanly
+        db.update_lead(slug, {"pipeline_status": "pending"})
+        lead["pipeline_status"] = "pending"
+
+        from services.pipeline_runner import start_pipeline
+        run = start_pipeline(lead)
+        return jsonify({"ok": True, "run_id": run["id"], "slug": slug})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @api_bp.route("/api/pipeline/run-batch", methods=["POST"])
 def run_batch():
     """Start pipeline for multiple leads."""
@@ -278,18 +307,27 @@ def send_email(email_id):
             sender, to_email,
             email.get("subject", ""),
             email.get("html_content", ""),
+            slug=email.get("slug"),
+            email_id=email_id,
         )
 
         if not result["success"]:
             return jsonify({"error": result["error"]}), 500
 
+        # Build tracking pixel URL for DB storage
+        from config import TRACKER_BASE_URL
+        tracking_url = f"{TRACKER_BASE_URL}/.netlify/functions/track?t={email_id}" if TRACKER_BASE_URL else None
+
         # Update email status
-        db.update_email(email_id, {
+        update_fields = {
             "status": "sent",
             "sent_at": datetime.utcnow().isoformat(),
             "sender_account": sender,
             "sent_via": "smtp",
-        })
+        }
+        if tracking_url:
+            update_fields["tracking_pixel_url"] = tracking_url
+        db.update_email(email_id, update_fields)
 
         # Advance sequence
         seq = db.get_sequence_by_slug(email.get("slug", ""))
@@ -352,6 +390,7 @@ def preview_email(email_id):
         "touchpoint": email.get("touchpoint", 1),
         "to_email": email.get("to_email", ""),
         "slug": slug,
+        "open_count": email.get("open_count", 0),
     })
 
 
@@ -656,6 +695,90 @@ def queue_skip(queue_id):
         from services.daily_queue_service import skip_queue_item
         item = skip_queue_item(queue_id)
         return jsonify({"ok": True, "item": item})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Email Hub ────────────────────────────────────────
+
+@api_bp.route("/api/emails/list")
+def list_emails():
+    """Paginated email listing with filters."""
+    status = request.args.get("status")
+    search = request.args.get("search", "").strip()
+    sender = request.args.get("sender", "").strip()
+    page = int(request.args.get("page", 1))
+    per_page = int(request.args.get("per_page", 50))
+    sort_by = request.args.get("sort_by", "created_at")
+    sort_dir = request.args.get("sort_dir", "desc")
+
+    try:
+        emails, total = db.get_all_emails(
+            status=status or None,
+            search=search or None,
+            sender=sender or None,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            page=page,
+            per_page=per_page,
+        )
+        # Enrich with lead info
+        for e in emails:
+            if e.get("lead_id"):
+                lead = db.get_lead_by_id(e["lead_id"])
+                e["lead_name"] = lead.get("company_name", "") if lead else ""
+            else:
+                e["lead_name"] = ""
+        return jsonify({"ok": True, "emails": emails, "total": total, "page": page, "per_page": per_page})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/api/emails/stats")
+def email_stats():
+    """Email stats summary."""
+    try:
+        stats = db.get_email_stats()
+        return jsonify({"ok": True, "stats": stats})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/api/replies")
+def list_replies():
+    """All replies with lead info."""
+    sentiment = request.args.get("sentiment", "").strip()
+    limit = int(request.args.get("limit", 100))
+    try:
+        replies = db.get_all_replies(sentiment=sentiment or None, limit=limit)
+        for r in replies:
+            if r.get("lead_id"):
+                lead = db.get_lead_by_id(r["lead_id"])
+                r["lead_name"] = lead.get("company_name", "") if lead else ""
+            else:
+                r["lead_name"] = ""
+        return jsonify({"ok": True, "replies": replies})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/api/senders/performance")
+def senders_performance():
+    """Per-sender metrics."""
+    try:
+        perf = db.get_sender_performance()
+        return jsonify({"ok": True, "performance": perf})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/api/senders/daily-history")
+def senders_daily_history():
+    """Daily send counts per sender over last 30 days."""
+    days = int(request.args.get("days", 30))
+    try:
+        history = db.get_sends_per_sender(days=days)
+        return jsonify({"ok": True, "history": history})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

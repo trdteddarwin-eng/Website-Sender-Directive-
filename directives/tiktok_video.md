@@ -13,9 +13,10 @@ Create a 15-scene TikTok-style Remotion video on any given topic. User just says
 
 ## Architecture
 All videos follow the same proven structure from `AIAutomation.tsx`:
-- **15 scenes**, 70 frames each (~2.33s per scene at 30fps)
-- **TransitionSeries** with 10-frame fade transitions
-- **Total duration**: 1190 frames (~39.7s)
+- **15 scenes**, 140 frames each (~2.33s per scene at 60fps)
+- **TransitionSeries** with 20-frame fade transitions
+- **Total duration**: 2380 frames (~39.7s)
+- **FPS**: 60fps (native — all videos render at 60fps)
 - **Resolution**: 1080x1920 (TikTok vertical)
 - **Audio**: Per-scene narration (ElevenLabs TTS) + per-scene SFX (Replicate AudioGen, ~$0.012/scene)
 - **Brand colors**: RED `#FF3B3B`, GREEN `#4ADE80`, ACCENT `#FBBF24`, BLUE `#60A5FA`
@@ -49,7 +50,7 @@ Present to user for approval before building (unless they say "just build it").
 Follow the exact structure of `AIAutomation.tsx`:
 ```
 - Imports (React, Remotion, Audio, TransitionSeries, fade, loadFont)
-- Constants (W, H, CX, CY, SD=70, FADE=10, colors)
+- Constants (W, H, CX, CY, SD=140, FADE=20, colors) — all frame constants are at 60fps
 - SCENES array (15 strings)
 - TextBlock component (fade in/out + translateY)
 - G0 through G14 graphic components (SVG + CSS animations)
@@ -62,14 +63,16 @@ Follow the exact structure of `AIAutomation.tsx`:
 - Narration: `narration-{slug}/scene_XX.mp3`
 - SFX: `sfx-{slug}/sfx_XX.mp3`
 
-**SFX volume pattern** (proven, don't change):
+**SFX volume pattern** (proven, don't change — uses fps normalization):
 ```tsx
 volume={(f) => {
-  const fadeIn = Math.min(f / 5, 1);
-  const fadeOut = f > SD - FADE ? Math.max(1 - (f - (SD - FADE)) / FADE, 0) : 1;
+  const rawF = f * 30 / fps;
+  const fadeIn = Math.min(rawF / 5, 1);
+  const fadeOut = rawF > SD_30 - FADE_30 ? Math.max(1 - (rawF - (SD_30 - FADE_30)) / FADE_30, 0) : 1;
   return 0.4 * fadeIn * fadeOut;
 }}
 ```
+Where `SD_30=70` and `FADE_30=10` are the 30fps-equivalent constants. This ensures audio fades are fps-independent.
 
 ### Step 3: Register in Root.tsx
 **File**: `tiktok-recreation/src/Root.tsx`
@@ -81,8 +84,8 @@ import { ComponentName } from "./ComponentName";
 <Composition
   id="ComponentName"
   component={ComponentName}
-  durationInFrames={1190}
-  fps={30}
+  durationInFrames={2380}
+  fps={60}
   width={1080}
   height={1920}
 />
@@ -119,8 +122,9 @@ Pattern from `generate_automation_sfx.py`:
 ```bash
 cd tiktok-recreation
 npx tsc --noEmit
-npx remotion render ComponentName out/{slug}.mp4
+npx remotion render ComponentName out/{slug}.mp4 --codec=h264
 ```
+Output will be 60fps natively. No ffmpeg interpolation needed.
 
 ### Step 7: Open & Verify
 ```bash
@@ -138,6 +142,7 @@ Check:
 - Use **CSS animations** via `interpolate()`, `spring()`, and `Math.sin()` for motion
 - RED for problems/pain, GREEN for solutions/wins, ACCENT for urgency/highlights
 - Each graphic should have **opacity fade-in** using spring or interpolate
+- **FPS normalization**: All components must use `const f = frame * 30 / fps` so animation timing is fps-independent. Springs use `spring({ frame: f, fps: 30, config })`. This ensures identical animation at any fps.
 - Scene 14 (CTA) always uses the **terminal typing pattern** with a relevant icon
 - Reuse the **robot icon pattern** (antenna, head, eyes, mouth) for AI-related scenes
 - Reuse the **racing robots pattern** (G12 from AIAutomation) for competitor scenes
@@ -177,3 +182,4 @@ Check:
 - **Filename conflicts**: Always check `execution/` for existing scripts with similar names before creating new ones.
 - **Long narration text**: Keep each scene's narration under ~8 words for punchiness. The voice reads at ~2 words/second, so 2.33s per scene = max ~5 words ideally.
 - **TypeScript errors**: Run `npx tsc --noEmit` before rendering. Common issues: missing imports, unused variables, SVG attribute types.
+- **FPS**: ALL videos must render at 60fps. Never use 30fps. Use `const f = frame * 30 / fps` normalization in every component so all frame math stays in 30fps-equivalent units while rendering at native 60fps.

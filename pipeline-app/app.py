@@ -19,6 +19,8 @@ from blueprints.settings import settings_bp
 from blueprints.api import api_bp
 from blueprints.inbox import inbox_bp
 from blueprints.drafts import drafts_bp
+from blueprints.emails import emails_bp
+from blueprints.senders import senders_bp
 
 
 def create_app():
@@ -37,6 +39,8 @@ def create_app():
     app.register_blueprint(api_bp)
     app.register_blueprint(inbox_bp)
     app.register_blueprint(drafts_bp)
+    app.register_blueprint(emails_bp)
+    app.register_blueprint(senders_bp)
 
     # Start background scheduler
     try:
@@ -51,6 +55,11 @@ def create_app():
 if __name__ == "__main__":
     app = create_app()
     port = int(os.environ.get("PORT", 5050))
-    print(f"\n  TedCA Pipeline Dashboard")
-    print(f"  http://localhost:{port}\n")
-    app.run(host="0.0.0.0", port=port, debug=True, use_reloader=False)
+    is_production = os.environ.get("RAILWAY_ENVIRONMENT") is not None
+    if is_production:
+        print(f"  TedCA Pipeline — Railway (port {port})")
+        app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+    else:
+        print(f"\n  TedCA Pipeline Dashboard")
+        print(f"  http://localhost:{port}\n")
+        app.run(host="0.0.0.0", port=port, debug=True, use_reloader=False)

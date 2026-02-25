@@ -6,37 +6,37 @@ Usage:
   python execution/generate_receptionist_narration.py
 
 Output:
-  tiktok-recreation/public/narration-receptionist/scene_00.mp3 ... scene_14.mp3
+  yt-growth-chart/public/narration-receptionist/scene_00.mp3 ... scene_14.mp3
 """
 
 import os
 import time
 import requests
 
-ELEVENLABS_API_KEY = "sk_ca9e25701082fd7941547381912b051e8b6618330eaceb85"
-OUTPUT_DIR = "tiktok-recreation/public/narration-receptionist"
+ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "sk_19970146a3f8d3964e93feb3aff4acb54b2732be03e2cf5c")
+OUTPUT_DIR = "yt-growth-chart/public/narration-receptionist"
 
 # Voice: Roger (CwhRBWXzGAHq8TQ4Fs17)
 VOICE_ID = "CwhRBWXzGAHq8TQ4Fs17"
 MODEL_ID = "eleven_multilingual_v2"
 
-# Scene texts (matching VoiceReceptionist.tsx SCENES array)
+# Scene narration texts (speakable — no special characters, numbers spelled out)
 SCENES = [
-    "Your phone rings at 8 PM. Nobody answers.",
-    "62 percent of calls to small businesses go unanswered",
-    "80 percent of those callers won't leave a voicemail",
-    "They just call your competitor instead",
-    "That's 75 thousand dollars per year walking out the door",
-    "What if every call was answered instantly?",
-    "AI voice receptionist picks up in one ring",
-    "It sounds human. It IS that good.",
-    "Qualifies leads and answers FAQs on the spot",
-    "Books appointments directly into your calendar",
-    "Sends you a summary of every single call",
-    "24/7. Weekends. Holidays. Always on.",
-    "No hold music. No missed opportunities.",
-    "Your competitors still use voicemail. You won't.",
-    "DM receptionist to never miss a call",
+    "That call you just missed? It was a ten thousand dollar client",
+    "Sixty two percent of calls go to voicemail",
+    "Most people never call back",
+    "You're losing revenue every single ring",
+    "What if AI answered every call instantly?",
+    "Picks up in one ring. Sounds completely human.",
+    "Qualifies the caller. Asks the right questions.",
+    "Books appointments right on your calendar",
+    "Sends you a summary of every call",
+    "Handles ten calls at once. Zero hold time.",
+    "Speaks any language your clients speak",
+    "Twenty four seven. Including holidays.",
+    "Your competitor picks up. You don't. They win.",
+    "Every missed call is a missed deal",
+    "DM receptionist to get your AI receptionist",
 ]
 
 
@@ -64,8 +64,7 @@ def generate_scene_audio(text, output_path):
     with open(output_path, "wb") as f:
         f.write(resp.content)
 
-    size_kb = len(resp.content) / 1024
-    return size_kb
+    return len(resp.content) / 1024
 
 
 def main():
