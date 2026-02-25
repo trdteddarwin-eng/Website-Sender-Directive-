@@ -46,14 +46,31 @@ def telegram_webhook():
 
 @telegram_bp.route("/telegram/debug", methods=["GET"])
 def telegram_debug():
-    """Debug endpoint — shows env var status (not values) for troubleshooting."""
+    """Debug endpoint — shows env var status and tests sending a message."""
+    import requests as req
+
     token = os.getenv("TELEGRAM_BOT_TOKEN", "")
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
     openrouter = os.getenv("OPENROUTER_API_KEY", "")
+
+    # Try sending a test message
+    send_result = "skipped"
+    if token and chat_id:
+        try:
+            resp = req.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={"chat_id": chat_id, "text": "Debug test from Railway"},
+                timeout=10,
+            )
+            send_result = f"{resp.status_code}: {resp.text[:200]}"
+        except Exception as e:
+            send_result = f"error: {e}"
+
     return jsonify({
         "TELEGRAM_BOT_TOKEN": f"set ({len(token)} chars)" if token else "NOT SET",
         "TELEGRAM_CHAT_ID": chat_id if chat_id else "NOT SET",
         "OPENROUTER_API_KEY": f"set ({len(openrouter)} chars)" if openrouter else "NOT SET",
         "RAILWAY_PUBLIC_DOMAIN": os.getenv("RAILWAY_PUBLIC_DOMAIN", "NOT SET"),
         "RAILWAY_ENVIRONMENT": os.getenv("RAILWAY_ENVIRONMENT", "NOT SET"),
+        "test_send_result": send_result,
     })
