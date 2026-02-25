@@ -20,6 +20,7 @@ _active_draft = {}
 def _send_telegram(text, chat_id=None, reply_markup=None):
     """Send a message to Telegram."""
     if not TELEGRAM_BOT_TOKEN:
+        print("[TelegramService] TELEGRAM_BOT_TOKEN not set, skipping send")
         return
     payload = {
         "chat_id": chat_id or TELEGRAM_CHAT_ID,
@@ -29,11 +30,15 @@ def _send_telegram(text, chat_id=None, reply_markup=None):
     if reply_markup:
         payload["reply_markup"] = reply_markup
     try:
-        requests.post(
+        resp = requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
             json=payload,
             timeout=10,
         )
+        if not resp.ok:
+            print(f"[TelegramService] Telegram API error: {resp.status_code} {resp.text}")
+        else:
+            print(f"[TelegramService] Message sent to {payload['chat_id']}")
     except Exception as e:
         print(f"[TelegramService] Send failed: {e}")
 
