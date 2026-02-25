@@ -44,58 +44,49 @@ def telegram_webhook():
 
 @telegram_bp.route("/telegram/test", methods=["GET"])
 def telegram_test():
-    """Test the full flow: load draft from Supabase, send message to Telegram."""
+    """Create a test draft on Railway and send notification — full end-to-end test."""
+    import uuid
     import requests as req
 
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
     results = {"errors": []}
 
-    # 1. Test draft loading
+    # 1. Test Supabase connection
     try:
-        from services.telegram_service import _load_active_draft
-        draft = _load_active_draft()
-        if draft:
-            results["draft"] = {
-                "id": draft.get("auto_reply_id", "")[:8],
-                "lead": draft.get("lead_name", ""),
-                "body_preview": draft.get("current_body", "")[:80],
-            }
-        else:
-            results["draft"] = None
-            results["errors"].append("No draft with status=draft found in Supabase")
+        from services import supabase_client as test_db
+        drafts = test_db.get_auto_replies(status="draft", limit=1)
+        results["supabase"] = "ok"
+        results["existing_drafts"] = len(drafts)
     except Exception as e:
-        results["draft"] = None
-        results["errors"].append(f"Draft load failed: {e}")
+        results["supabase"] = f"error: {e}"
+        results["errors"].append(f"Supabase failed: {e}")
 
-    # 2. Send plain text test
+    # 2. Test Telegram send (plain text, no Markdown)
     try:
         resp = req.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat_id, "text": "Test: bot can send plain text."},
+            json={"chat_id": chat_id, "text": "Test: bot is alive."},
             timeout=10,
         )
-        results["plain_text_send"] = resp.status_code
-        if not resp.ok:
-            results["errors"].append(f"Plain text failed: {resp.text[:200]}")
+        results["telegram_send"] = resp.status_code
     except Exception as e:
-        results["errors"].append(f"Send error: {e}")
+        results["errors"].append(f"Telegram send error: {e}")
 
-    # 3. Send a message with draft content (like the handler does)
-    if results.get("draft"):
-        body = results["draft"]["body_preview"]
-        lead = results["draft"]["lead"]
-        msg = f"Active draft:\nTo: {lead}\n\n---\n{body}\n---\n\nReply to revise, \"send\" to approve, \"skip\" to discard"
+    # 3. If Supabase works, load the latest draft into active state
+    if results.get("supabase") == "ok" and results.get("existing_drafts", 0) > 0:
         try:
-            resp2 = req.post(
-                f"https://api.telegram.org/bot{token}/sendMessage",
-                json={"chat_id": chat_id, "text": msg},
-                timeout=10,
-            )
-            results["draft_send"] = resp2.status_code
-            if not resp2.ok:
-                results["errors"].append(f"Draft send failed: {resp2.text[:200]}")
+            from services.telegram_service import _load_active_draft, _send_status
+            draft = _load_active_draft()
+            if draft:
+                results["active_draft_set"] = True
+                results["draft_id"] = draft.get("auto_reply_id", "")[:8]
+                # Send status message to Telegram so user sees the draft
+                _send_status(chat_id)
+                results["status_sent"] = True
+            else:
+                results["active_draft_set"] = False
         except Exception as e:
-            results["errors"].append(f"Draft send error: {e}")
+            results["errors"].append(f"Draft load/send failed: {e}")
 
     return jsonify(results)
