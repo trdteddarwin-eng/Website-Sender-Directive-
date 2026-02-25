@@ -5,9 +5,14 @@ import sys
 import json
 import smtplib
 import uuid
+import requests
 from email.mime.text import MIMEText
 from email.utils import formatdate, make_msgid
 from datetime import datetime
+
+# Telegram notification config
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from services import supabase_client as db
@@ -21,6 +26,33 @@ SMTP_ACCOUNTS_PATH = os.path.join(_WORKSPACE_ROOT, "execution", "smtp_accounts.j
 
 sys.path.insert(0, os.path.join(_WORKSPACE_ROOT, "execution"))
 from generate_reply_email import generate_reply
+
+
+DASHBOARD_URL = os.getenv("RAILWAY_STATIC_URL", os.getenv("RAILWAY_PUBLIC_DOMAIN", "localhost:5050"))
+
+
+def _notify_telegram(lead_name, company, sentiment, from_email, subject, draft_preview):
+    """Send a Telegram notification when a new draft reply is ready."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    emoji = {"positive": "🟢", "negative": "🔴", "neutral": "🟡"}.get(sentiment, "⚪")
+    text = (
+        f"{emoji} *New reply from lead*\n\n"
+        f"*From:* {lead_name} ({company})\n"
+        f"*Email:* {from_email}\n"
+        f"*Subject:* {subject}\n"
+        f"*Sentiment:* {sentiment}\n\n"
+        f"*Their message:*\n_{draft_preview}_\n\n"
+        f"👉 Review & approve on your dashboard:\nhttps://{DASHBOARD_URL}/inbox"
+    )
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "Markdown"},
+            timeout=10,
+        )
+    except Exception as e:
+        print(f"[Telegram] Notification failed: {e}")
 
 
 def _load_smtp_accounts():
@@ -191,24 +223,9 @@ def process_new_email(account_email, uid, from_email, subject):
         print(f"[AutoReply] Empty reply body for {from_email}, saving as draft")
         sentiment = "neutral"  # Force to draft
 
-    # Decide: send or draft
-    if sentiment in ("positive", "neutral", "negative") and reply_body:
-        # Auto-send immediately
-        try:
-            send_reply_smtp(
-                account_obj, from_email, reply_subject, reply_body,
-                in_reply_to_msgid=incoming_message_id,
-            )
-            status = "sent"
-            sent_at = datetime.utcnow().isoformat()
-        except Exception as e:
-            print(f"[AutoReply] SMTP send failed: {e}")
-            status = "failed"
-            sent_at = None
-    else:
-        # Save as draft for review
-        status = "draft"
-        sent_at = None
+    # Always save as draft for human review — never auto-send
+    status = "draft"
+    sent_at = None
 
     # Record in auto_replies
     record = {
@@ -226,6 +243,17 @@ def process_new_email(account_email, uid, from_email, subject):
         "sent_at": sent_at,
     }
     db.create_auto_reply(record)
+
+    # Notify via Telegram
+    if status == "draft" and reply_body:
+        _notify_telegram(
+            lead_name=lead.get("first_name") or lead.get("full_name", ""),
+            company=lead.get("company_name", ""),
+            sentiment=sentiment,
+            from_email=from_email,
+            subject=subject,
+            draft_preview=analysis_text[:300],
+        )
 
     # Update original email status to "replied" and stop sequence
     if original_email and status == "sent":
