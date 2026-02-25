@@ -131,6 +131,60 @@ OUTPUT FORMAT (valid JSON only):
         return _fallback_reply(lead_name, company, original_subject, sentiment, sender_name)
 
 
+def revise_reply(current_draft, user_feedback, lead_name, company, sender_name="Ted"):
+    """Revise a draft email based on user feedback via OpenRouter."""
+    if not OPENROUTER_API_KEY:
+        return {"reply_body": current_draft}
+
+    prompt = f"""You are {sender_name}. You wrote this email draft to {lead_name} at {company}:
+
+---
+{current_draft}
+---
+
+The user wants you to revise it. Their feedback:
+"{user_feedback}"
+
+Rewrite the email incorporating their feedback. Same rules: plain text, sound human, concise. No em dashes, no corporate speak. Sign off with just {sender_name}.
+
+OUTPUT FORMAT (valid JSON only):
+{{"reply_body": "the revised email text"}}"""
+
+    try:
+        resp = http_requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": MODEL,
+                "max_tokens": 500,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        response_text = resp.json()["choices"][0]["message"]["content"].strip()
+
+        # Clean markdown code blocks
+        if response_text.startswith("```"):
+            lines = response_text.split("\n")
+            start = 1
+            end = len(lines) - 1
+            for i, line in enumerate(lines):
+                if i > 0 and line.strip() == "```":
+                    end = i
+                    break
+            response_text = "\n".join(lines[start:end])
+
+        result = json.loads(response_text)
+        return {"reply_body": result.get("reply_body", current_draft)}
+    except Exception as e:
+        print(f"[revise_reply] OpenRouter error: {e}", file=sys.stderr)
+        return {"reply_body": current_draft}
+
+
 def _fallback_reply(lead_name, company, original_subject, sentiment, sender_name):
     """Template fallback if API is unavailable."""
     first = lead_name.split()[0] if lead_name else "there"

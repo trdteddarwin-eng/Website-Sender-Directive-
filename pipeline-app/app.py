@@ -21,6 +21,7 @@ from blueprints.inbox import inbox_bp
 from blueprints.drafts import drafts_bp
 from blueprints.emails import emails_bp
 from blueprints.senders import senders_bp
+from blueprints.telegram_bot import telegram_bp
 
 
 def create_app():
@@ -41,6 +42,26 @@ def create_app():
     app.register_blueprint(drafts_bp)
     app.register_blueprint(emails_bp)
     app.register_blueprint(senders_bp)
+    app.register_blueprint(telegram_bp)
+
+    # Set Telegram webhook on Railway
+    try:
+        import requests as _req
+        _tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        _railway_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
+        if _tg_token and _railway_domain:
+            webhook_url = f"https://{_railway_domain}/telegram/webhook"
+            resp = _req.post(
+                f"https://api.telegram.org/bot{_tg_token}/setWebhook",
+                json={"url": webhook_url},
+                timeout=10,
+            )
+            if resp.ok:
+                print(f"  Telegram webhook set: {webhook_url}")
+            else:
+                print(f"  [Warning] Telegram webhook failed: {resp.text}")
+    except Exception as e:
+        print(f"  [Warning] Telegram webhook setup failed: {e}")
 
     # Start background scheduler
     try:

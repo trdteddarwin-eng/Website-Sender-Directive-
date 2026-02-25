@@ -31,28 +31,57 @@ from generate_reply_email import generate_reply
 DASHBOARD_URL = os.getenv("RAILWAY_STATIC_URL", os.getenv("RAILWAY_PUBLIC_DOMAIN", "localhost:5050"))
 
 
-def _notify_telegram(lead_name, company, sentiment, from_email, subject, draft_preview):
-    """Send a Telegram notification when a new draft reply is ready."""
+def _notify_telegram(lead_name, company, sentiment, from_email, subject,
+                     draft_preview, auto_reply_id="", reply_body="",
+                     reply_subject="", sender_name="Ted"):
+    """Send a Telegram notification with draft text and inline buttons."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return
     emoji = {"positive": "🟢", "negative": "🔴", "neutral": "🟡"}.get(sentiment, "⚪")
     text = (
         f"{emoji} *New reply from lead*\n\n"
         f"*From:* {lead_name} ({company})\n"
-        f"*Email:* {from_email}\n"
         f"*Subject:* {subject}\n"
         f"*Sentiment:* {sentiment}\n\n"
         f"*Their message:*\n_{draft_preview}_\n\n"
-        f"👉 Review & approve on your dashboard:\nhttps://{DASHBOARD_URL}/inbox"
+        f"*AI Draft:*\n---\n{reply_body}\n---\n\n"
+        f"Reply to revise • \"send\" to approve • \"skip\" to discard"
     )
+    # Inline keyboard: Send / Skip buttons
+    inline_keyboard = {
+        "inline_keyboard": [[
+            {"text": "✅ Send", "callback_data": f"send_{auto_reply_id}"},
+            {"text": "❌ Skip", "callback_data": f"skip_{auto_reply_id}"},
+        ]]
+    }
     try:
         requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            json={"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "Markdown"},
+            json={
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": text,
+                "parse_mode": "Markdown",
+                "reply_markup": inline_keyboard,
+            },
             timeout=10,
         )
     except Exception as e:
         print(f"[Telegram] Notification failed: {e}")
+
+    # Set active draft in telegram service for chat-based revision
+    try:
+        from services.telegram_service import set_active_draft
+        set_active_draft(
+            auto_reply_id=auto_reply_id,
+            reply_body=reply_body,
+            reply_subject=reply_subject,
+            lead_name=lead_name,
+            company=company,
+            sender_name=sender_name,
+            incoming_from=from_email,
+        )
+    except Exception as e:
+        print(f"[Telegram] set_active_draft failed: {e}")
 
 
 def _load_smtp_accounts():
@@ -242,9 +271,10 @@ def process_new_email(account_email, uid, from_email, subject):
         "status": status,
         "sent_at": sent_at,
     }
-    db.create_auto_reply(record)
+    created = db.create_auto_reply(record)
+    auto_reply_id = created.get("id", record.get("id", ""))
 
-    # Notify via Telegram
+    # Notify via Telegram with draft text + inline buttons
     if status == "draft" and reply_body:
         _notify_telegram(
             lead_name=lead.get("first_name") or lead.get("full_name", ""),
@@ -253,6 +283,10 @@ def process_new_email(account_email, uid, from_email, subject):
             from_email=from_email,
             subject=subject,
             draft_preview=analysis_text[:300],
+            auto_reply_id=auto_reply_id,
+            reply_body=reply_body,
+            reply_subject=reply_subject,
+            sender_name=sender_name,
         )
 
     # Update original email status to "replied" and stop sequence
