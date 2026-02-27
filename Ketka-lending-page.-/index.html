@@ -59,7 +59,7 @@
         /* Spline 3D Hero */
         #spline-hero-wrap {
             position: relative;
-            overflow: visible;
+            overflow: hidden;
         }
         #spline-hero-wrap spline-viewer {
             --logo-color: transparent;
@@ -935,7 +935,7 @@
                 </div>
 
                 <!-- Right: Spline 3D Scene -->
-                <div class="relative animate-fade-in-up delay-200" id="spline-hero-wrap" style="height:600px; margin:-40px -20px -40px 0;">
+                <div class="relative animate-fade-in-up delay-200" id="spline-hero-wrap" style="height:600px;">
                     <spline-viewer url="https://prod.spline.design/pR4jr0vesEcOOm-r/scene.splinecode" style="width:100%;height:100%;display:block;background:transparent;"></spline-viewer>
                 </div>
             </div>
@@ -1086,34 +1086,9 @@
                                         </div>
                                     </div>
 
-                                    <div class="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label class="text-[10px] font-mono uppercase text-dark/50 tracking-widest mb-1.5 block">Phone</label>
-                                            <input type="tel" name="phone" required class="form-input w-full p-3 text-sm rounded-none border border-dark/10" placeholder="+1 555 000 0000">
-                                        </div>
-                                        <div>
-                                            <label class="text-[10px] font-mono uppercase text-dark/50 tracking-widest mb-1.5 block">Email</label>
-                                            <input type="email" name="email" required class="form-input w-full p-3 text-sm rounded-none border border-dark/10" placeholder="john@example.com">
-                                        </div>
-                                    </div>
-
                                     <div>
-                                        <label class="text-[10px] font-mono uppercase text-dark/50 tracking-widest mb-1.5 block">Company Type</label>
-                                        <select name="industry" class="form-input w-full p-3 text-sm appearance-none cursor-pointer rounded-none border border-dark/10">
-                                            <option value="">What type of business do you run?</option>
-                                            <option value="Law Firm">Law Firm</option>
-                                            <option value="Dental">Dental Practice</option>
-                                            <option value="HVAC">HVAC / Plumbing / Home Services</option>
-                                            <option value="Medical">Medical Office</option>
-                                            <option value="Real Estate">Real Estate</option>
-                                            <option value="Auto">Auto Repair</option>
-                                            <option value="Other">Other Service Business</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label class="text-[10px] font-mono uppercase text-dark/50 tracking-widest mb-1.5 block">Company Name</label>
-                                        <input type="text" name="businessName" class="form-input w-full p-3 text-sm rounded-none border border-dark/10" placeholder="Your Business Name">
+                                        <label class="text-[10px] font-mono uppercase text-dark/50 tracking-widest mb-1.5 block">Email</label>
+                                        <input type="email" name="email" required class="form-input w-full p-3 text-sm rounded-none border border-dark/10" placeholder="john@example.com">
                                     </div>
 
                                     <button type="submit"
@@ -1133,15 +1108,15 @@
                                         <div class="space-y-2 text-xs font-mono text-dark/80">
                                             <div class="flex items-center gap-2">
                                                 <i class="fa-solid fa-check text-signal text-[10px]"></i>
-                                                <span>"I'd like to book an appointment"</span>
+                                                <span>"I'd like to book a cleaning"</span>
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <i class="fa-solid fa-check text-signal text-[10px]"></i>
+                                                <span>"What are your hours?"</span>
                                             </div>
                                             <div class="flex items-center gap-2">
                                                 <i class="fa-solid fa-check text-signal text-[10px]"></i>
                                                 <span>"I need to reschedule my appointment"</span>
-                                            </div>
-                                            <div class="flex items-center gap-2">
-                                                <i class="fa-solid fa-check text-signal text-[10px]"></i>
-                                                <span>"What does this AI actually do?"</span>
                                             </div>
                                         </div>
                                     </div>
@@ -1820,13 +1795,13 @@
             <div id="svc-agentic" class="tab-panel" style="display:none;">
                 <p class="font-sans text-sm text-dark/70 text-center max-w-2xl mx-auto mb-10">Complex jobs that normally take hours — handled start to finish by AI agents working together. Unlike simple automation, agentic workflows make decisions, adapt, and deliver complete results.</p>
                 <div class="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-                    <!-- TikTok Workflow Card -->
+                    <!-- Motion Graphic Video Creation Card -->
                     <div class="agentic-card bg-paper border border-dark/10 p-6 group hover:border-signal transition-all cursor-pointer" data-agentic="tiktok">
                         <div class="w-12 h-12 mb-4 bg-signal text-paper flex items-center justify-center rounded-lg">
-                            <i class="fa-brands fa-tiktok text-xl"></i>
+                            <i class="fa-solid fa-video text-xl"></i>
                         </div>
-                        <h3 class="font-heading text-lg font-bold text-dark mb-2 uppercase tracking-tight">TikTok Video Creation</h3>
-                        <p class="font-sans text-xs text-dark/60 mb-4 leading-relaxed">Give it a topic. Get back a fully produced TikTok — script, narration, sound effects, and rendered video. No editing needed.</p>
+                        <h3 class="font-heading text-lg font-bold text-dark mb-2 uppercase tracking-tight">Motion Graphic Video Creation</h3>
+                        <p class="font-sans text-xs text-dark/60 mb-4 leading-relaxed">Give it a topic. Get back a fully produced motion graphic video — script, narration, sound effects, and rendered video. No editing needed.</p>
                         <!-- Workflow Steps -->
                         <div class="workflow-steps relative">
                             <div class="flex items-center justify-between relative z-10">
@@ -1901,92 +1876,6 @@
                 <div class="text-center mt-8">
                     <a href="#book-call" class="inline-block px-8 py-4 bg-signal text-paper text-xs font-mono font-bold uppercase tracking-widest hover:bg-dark transition-colors pointer-events-auto">Book a Call →</a>
                 </div>
-
-                <!-- PIPELINE SIMULATION (moved into tab) -->
-                <section class="py-16 md:py-24 bg-dark relative overflow-hidden">
-                    <div class="hiw-noise"></div>
-                    <div class="max-w-5xl mx-auto px-6 md:px-8 relative z-10">
-                        <div class="text-center mb-12">
-                            <span class="text-[10px] font-mono font-bold uppercase tracking-[0.3em] text-paper/50 mb-4 block">Watch It Work</span>
-                            <h2 class="font-heading text-4xl md:text-5xl font-bold tracking-tighter text-paper uppercase mb-4">
-                                <span class="block">4 AI Agents.</span>
-                                <span class="block text-signal">One Automated Pipeline.</span>
-                            </h2>
-                            <p class="font-sans text-paper/60 text-sm max-w-2xl mx-auto">Watch our AI pipeline process a real lead — from research to deployed site to outreach email — in under 2 minutes.</p>
-                        </div>
-
-                        <!-- Pipeline Simulation Container -->
-                        <div class="pipeline-sim" id="pipeline-sim">
-                            <!-- Header Bar -->
-                            <div class="pipeline-sim-header">
-                                <div class="flex items-center gap-4">
-                                    <span class="sim-title">TEDCA AI Pipeline</span>
-                                    <span class="sim-client">[ACME Plumbing]</span>
-                                </div>
-                                <div class="flex items-center gap-4">
-                                    <span class="sim-live"><span class="live-dot"></span> LIVE</span>
-                                    <span class="sim-timer" id="sim-timer">00:00</span>
-                                </div>
-                            </div>
-
-                            <!-- Body: Agents Grid + Activity Log -->
-                            <div class="pipeline-sim-body">
-                                <!-- Agent Cards (2x2) -->
-                                <div class="sim-agents-grid">
-                                    <!-- Researcher -->
-                                    <div class="sim-agent-card idle" id="sim-researcher">
-                                        <div class="sim-agent-name">
-                                            <span><i class="fa-solid fa-magnifying-glass" style="color:#60a5fa;margin-right:6px;font-size:10px;"></i>Researcher</span>
-                                            <span class="sim-badge idle" id="sim-researcher-badge">Idle</span>
-                                        </div>
-                                        <div class="sim-agent-task" id="sim-researcher-task">Waiting for lead...</div>
-                                        <div class="sim-completed-list" id="sim-researcher-completed"></div>
-                                    </div>
-                                    <!-- Designer -->
-                                    <div class="sim-agent-card idle" id="sim-designer">
-                                        <div class="sim-agent-name">
-                                            <span><i class="fa-solid fa-paintbrush" style="color:#c084fc;margin-right:6px;font-size:10px;"></i>Designer</span>
-                                            <span class="sim-badge idle" id="sim-designer-badge">Idle</span>
-                                        </div>
-                                        <div class="sim-agent-task" id="sim-designer-task">Waiting for research...</div>
-                                        <div class="sim-completed-list" id="sim-designer-completed"></div>
-                                    </div>
-                                    <!-- Judge -->
-                                    <div class="sim-agent-card idle" id="sim-judge">
-                                        <div class="sim-agent-name">
-                                            <span><i class="fa-solid fa-gavel" style="color:#fbbf24;margin-right:6px;font-size:10px;"></i>Judge</span>
-                                            <span class="sim-badge idle" id="sim-judge-badge">Idle</span>
-                                        </div>
-                                        <div class="sim-agent-task" id="sim-judge-task">Waiting for site...</div>
-                                        <div class="sim-completed-list" id="sim-judge-completed"></div>
-                                    </div>
-                                    <!-- Ops -->
-                                    <div class="sim-agent-card idle" id="sim-ops">
-                                        <div class="sim-agent-name">
-                                            <span><i class="fa-solid fa-rocket" style="color:#34d399;margin-right:6px;font-size:10px;"></i>Ops</span>
-                                            <span class="sim-badge idle" id="sim-ops-badge">Idle</span>
-                                        </div>
-                                        <div class="sim-agent-task" id="sim-ops-task">Waiting for approval...</div>
-                                        <div class="sim-completed-list" id="sim-ops-completed"></div>
-                                    </div>
-                                </div>
-
-                                <!-- Activity Log -->
-                                <div class="sim-activity-log" id="sim-log">
-                                    <div class="log-title">Activity Log</div>
-                                </div>
-                            </div>
-
-                            <!-- Output Bar -->
-                            <div class="sim-output-bar" id="sim-output-bar">
-                                <span class="output-label">OUTPUT</span>
-                                <span class="output-item"><i class="fa-solid fa-globe"></i> acme-plumbing.netlify.app deployed</span>
-                                <span class="output-item"><i class="fa-solid fa-envelope"></i> Outreach email sent</span>
-                                <span class="output-item"><i class="fa-solid fa-clock"></i> Follow-ups scheduled</span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
 
                 <!-- AUTOMATION BENEFITS (moved into tab) -->
                 <section class="py-16 bg-paper border-b border-dark/10 relative z-10">
@@ -3243,11 +3132,7 @@
                 const config = {
                     firstName: formData.get('firstName'),
                     lastName: formData.get('lastName'),
-                    phone: formData.get('phone'),
                     email: formData.get('email'),
-                    businessName: formData.get('businessName'),
-                    industry: formData.get('industry'),
-                    avgTicketValue: 300 // Default value, can be expanded in form
                 };
 
                 // Dispatch event to React App
@@ -3515,7 +3400,7 @@
         // ── Agentic Expand System ──
         const AGENTIC_DATA = {
             'tiktok': {
-                title: 'TikTok Video Creation Pipeline',
+                title: 'Motion Graphic Video Creation Pipeline',
                 steps: [
                     { label: 'Script Generation', icon: 'fa-solid fa-scroll', type: 'trigger', desc: 'AI writes a hook-driven script optimized for TikTok engagement and retention.' },
                     { label: 'Scene Composition', icon: 'fa-solid fa-film', type: 'ai', desc: 'Breaks the script into timed scenes with visual direction and motion cues.' },
@@ -3524,9 +3409,8 @@
                     { label: 'Render & Export', icon: 'fa-solid fa-clapperboard', type: 'outcome', desc: 'Remotion compiles all assets into a ready-to-post vertical video.' }
                 ],
                 videos: [
-                    { src: 'videos/speedtolead.mp4', label: 'Speed-to-Lead' },
-                    { src: 'videos/greengrow-ai-automation.mp4', label: 'AI Automation' },
-                    { src: 'videos/greengrow-brand-hero.mp4', label: 'Brand Hero' }
+                    { src: 'videos/ChatbotExplained.mp4', label: 'Chatbot Explained' },
+                    { src: 'videos/SEOExplained.mp4', label: 'SEO Explained' }
                 ]
             },
             'website-pipeline': {
@@ -3536,7 +3420,8 @@
                     { label: 'Design Spec Site', icon: 'fa-solid fa-paintbrush', type: 'ai', desc: 'AI generates a custom redesign of their website — fully coded HTML with their branding, services, and reviews.' },
                     { label: 'Quality Review', icon: 'fa-solid fa-clipboard-check', type: 'ai', desc: 'A judge agent scores the site on structure and visual quality. If it fails, it gets regenerated automatically.' },
                     { label: 'Deploy & Email', icon: 'fa-solid fa-rocket', type: 'outcome', desc: 'Site deploys to a live URL. A personalized outreach email with the link lands in your Gmail drafts, ready to send.' }
-                ]
+                ],
+                showPipeline: true
             }
         };
 
@@ -3551,6 +3436,7 @@
             if (activeAgenticCard === cardId) {
                 panel.classList.remove('agentic-open');
                 cards.forEach(function(c) { c.classList.remove('agentic-active'); });
+                if (typeof window.stopPipelineSim === 'function') window.stopPipelineSim();
                 activeAgenticCard = null;
                 return;
             }
@@ -3577,7 +3463,7 @@
                 html += '</div>';
             });
 
-            // Videos section (TikTok only)
+            // Videos section
             if (data.videos && data.videos.length) {
                 html += '<div style="margin-top:20px;"><span class="font-heading text-xs font-bold text-dark uppercase tracking-tight">Videos Created by This Pipeline</span></div>';
                 html += '<div class="agentic-video-row">';
@@ -3590,6 +3476,24 @@
                 html += '</div>';
             }
 
+            // Pipeline simulation (AI Outreach Pipeline)
+            if (data.showPipeline) {
+                html += '<div style="margin-top:24px; background:#111; border-radius:0; padding:0; overflow:hidden;">';
+                html += '<div style="text-align:center; padding:24px 16px 12px;"><span class="text-[10px] font-mono font-bold uppercase tracking-widest" style="color:rgba(255,255,255,0.4);">Watch It Work</span>';
+                html += '<h3 class="font-heading text-2xl md:text-3xl font-bold tracking-tighter uppercase" style="color:#fff; margin:8px 0 4px;">4 AI Agents. <span style="color:#E63B2E;">One Automated Pipeline.</span></h3>';
+                html += '<p class="font-sans text-xs" style="color:rgba(255,255,255,0.5); max-width:500px; margin:0 auto;">Watch our AI pipeline process a real lead — from research to deployed site to outreach email — in under 2 minutes.</p></div>';
+                html += '<div class="pipeline-sim" id="pipeline-sim">';
+                html += '<div class="pipeline-sim-header"><div style="display:flex;align-items:center;gap:16px;"><span class="sim-title">TEDCA AI Pipeline</span><span class="sim-client">[ACME Plumbing]</span></div><div style="display:flex;align-items:center;gap:16px;"><span class="sim-live"><span class="live-dot"></span> LIVE</span><span class="sim-timer" id="sim-timer">00:00</span></div></div>';
+                html += '<div class="pipeline-sim-body"><div class="sim-agents-grid">';
+                html += '<div class="sim-agent-card idle" id="sim-researcher"><div class="sim-agent-name"><span><i class="fa-solid fa-magnifying-glass" style="color:#60a5fa;margin-right:6px;font-size:10px;"></i>Researcher</span><span class="sim-badge idle" id="sim-researcher-badge">Idle</span></div><div class="sim-agent-task" id="sim-researcher-task">Waiting for lead...</div><div class="sim-completed-list" id="sim-researcher-completed"></div></div>';
+                html += '<div class="sim-agent-card idle" id="sim-designer"><div class="sim-agent-name"><span><i class="fa-solid fa-paintbrush" style="color:#c084fc;margin-right:6px;font-size:10px;"></i>Designer</span><span class="sim-badge idle" id="sim-designer-badge">Idle</span></div><div class="sim-agent-task" id="sim-designer-task">Waiting for research...</div><div class="sim-completed-list" id="sim-designer-completed"></div></div>';
+                html += '<div class="sim-agent-card idle" id="sim-judge"><div class="sim-agent-name"><span><i class="fa-solid fa-gavel" style="color:#fbbf24;margin-right:6px;font-size:10px;"></i>Judge</span><span class="sim-badge idle" id="sim-judge-badge">Idle</span></div><div class="sim-agent-task" id="sim-judge-task">Waiting for site...</div><div class="sim-completed-list" id="sim-judge-completed"></div></div>';
+                html += '<div class="sim-agent-card idle" id="sim-ops"><div class="sim-agent-name"><span><i class="fa-solid fa-rocket" style="color:#34d399;margin-right:6px;font-size:10px;"></i>Ops</span><span class="sim-badge idle" id="sim-ops-badge">Idle</span></div><div class="sim-agent-task" id="sim-ops-task">Waiting for approval...</div><div class="sim-completed-list" id="sim-ops-completed"></div></div>';
+                html += '</div><div class="sim-activity-log" id="sim-log"><div class="log-title">Activity Log</div></div></div>';
+                html += '<div class="sim-output-bar" id="sim-output-bar"><span class="output-label">OUTPUT</span><span class="output-item"><i class="fa-solid fa-globe"></i> acme-plumbing.netlify.app deployed</span><span class="output-item"><i class="fa-solid fa-envelope"></i> Outreach email sent</span><span class="output-item"><i class="fa-solid fa-clock"></i> Follow-ups scheduled</span></div>';
+                html += '</div></div>';
+            }
+
             content.innerHTML = html;
 
             // Open panel
@@ -3600,6 +3504,15 @@
             requestAnimationFrame(function() {
                 animateAgenticSteps();
             });
+
+            // Start pipeline simulation if present
+            if (data.showPipeline) {
+                setTimeout(function() {
+                    if (typeof window.runPipelineSim === 'function') {
+                        window.runPipelineSim();
+                    }
+                }, 300);
+            }
         }
 
         function animateAgenticSteps() {
@@ -3844,6 +3757,13 @@
                 }, 1000);
             }
 
+            window.runPipelineSim = runSimulation;
+            window.stopPipelineSim = function() {
+                SIM.isRunning = false;
+                SIM.timeouts.forEach(t => clearTimeout(t));
+                SIM.timeouts = [];
+                if (SIM.timerInterval) clearInterval(SIM.timerInterval);
+            };
             function runSimulation() {
                 if (SIM.isRunning) return;
                 SIM.isRunning = true;

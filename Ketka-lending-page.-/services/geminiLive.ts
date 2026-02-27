@@ -3,6 +3,8 @@ import { createPcmBlob, decodeAudioData, base64ToUint8Array } from '../utils/aud
 import { BusinessConfig, TranscriptItem } from '../types';
 import { SYSTEM_INSTRUCTION_TEMPLATE } from '../constants';
 
+export type ConnectionQuality = 'good' | 'fair' | 'poor';
+
 export class GeminiLiveService {
   private ai: GoogleGenAI;
   private inputAudioContext: AudioContext | null = null;
@@ -18,30 +20,62 @@ export class GeminiLiveService {
   private processingId: number = 0;
 
   // Transcription State
-  private currentInputText: string = "";
-  private currentOutputText: string = "";
+  private currentInputText: string = '';
+  private currentOutputText: string = '';
   private transcript: TranscriptItem[] = [];
 
+  // Session management
+  private sessionTimer: ReturnType<typeof setTimeout> | null = null;
+  private warningTimer: ReturnType<typeof setTimeout> | null = null;
+  private connectStartTime: number = 0;
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 2;
+  private lastConfig: BusinessConfig | null = null;
+  private lastMediaStream: MediaStream | null = null;
+
+  // Connection quality tracking
+  private lastAudioChunkTime: number = 0;
+  private audioGapCounts: number[] = []; // timestamps of large gaps
+  private currentQuality: ConnectionQuality = 'good';
+
+  // Session limits (ms)
+  private static readonly SESSION_MAX_MS = 5 * 60 * 1000; // 5 min
+  private static readonly SESSION_WARNING_MS = 4 * 60 * 1000; // 4 min
+
+  // Callbacks
   public onVolumeChange: ((volume: number) => void) | null = null;
   public onDisconnect: (() => void) | null = null;
   public onTranscript: ((transcript: TranscriptItem[]) => void) | null = null;
+  public onTimeout: ((info: { warning: boolean; disconnected: boolean }) => void) | null = null;
+  public onReconnecting: ((attempt: number) => void) | null = null;
+  public onReconnectFailed: (() => void) | null = null;
+  public onConnectionQuality: ((quality: ConnectionQuality) => void) | null = null;
 
   constructor() {
     const apiKey = process.env.API_KEY;
     if (!apiKey) {
-      console.error("API Key not found");
+      console.error('API Key not found');
     }
-    this.ai = new GoogleGenAI({ apiKey: apiKey || '' });
+    this.ai = new GoogleGenAI({ apiKey: apiKey || '', apiVersion: 'v1alpha' });
   }
 
   async connect(config: BusinessConfig) {
     if (this.isConnected) return;
 
+    this.lastConfig = config;
     this.transcript = [];
-    this.currentInputText = "";
-    this.currentOutputText = "";
+    this.currentInputText = '';
+    this.currentOutputText = '';
     this.processingId = 0;
+    this.reconnectAttempts = 0;
+    this.audioGapCounts = [];
+    this.currentQuality = 'good';
+    this.lastAudioChunkTime = 0;
 
+    await this.establishConnection(config);
+  }
+
+  private async establishConnection(config: BusinessConfig) {
     try {
       // Initialize Audio Contexts
       this.inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
@@ -61,13 +95,14 @@ export class GeminiLiveService {
           sampleRate: 16000,
         }
       });
+      this.lastMediaStream = stream;
 
       // Start Analysis Loop
       this.startAnalysisLoop();
 
       // Connect to Gemini Live
       this.sessionPromise = this.ai.live.connect({
-        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+        model: 'gemini-2.5-flash-native-audio-preview-12-2025',
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
@@ -81,38 +116,134 @@ export class GeminiLiveService {
           onopen: () => {
             console.log('Gemini Live Connection Opened');
             this.setupInputProcessing(stream);
+            this.startSessionTimers();
           },
           onmessage: this.handleMessage.bind(this),
           onclose: () => {
             console.log('Gemini Live Connection Closed');
-            this.cleanup();
+            this.handleConnectionLoss();
           },
           onerror: (e) => {
             console.error('Gemini Live Error', e);
-            this.cleanup();
+            this.handleConnectionLoss();
           }
         }
       });
 
       this.isConnected = true;
+      this.connectStartTime = Date.now();
     } catch (error) {
-      console.error("Failed to connect:", error);
+      console.error('Failed to connect:', error);
       this.cleanup();
       throw error;
+    }
+  }
+
+  private startSessionTimers() {
+    this.clearSessionTimers();
+
+    // 4-min warning
+    this.warningTimer = setTimeout(() => {
+      if (this.onTimeout) {
+        this.onTimeout({ warning: true, disconnected: false });
+      }
+    }, GeminiLiveService.SESSION_WARNING_MS);
+
+    // 5-min hard cutoff
+    this.sessionTimer = setTimeout(() => {
+      if (this.onTimeout) {
+        this.onTimeout({ warning: false, disconnected: true });
+      }
+      this.disconnect();
+    }, GeminiLiveService.SESSION_MAX_MS);
+  }
+
+  private clearSessionTimers() {
+    if (this.warningTimer) {
+      clearTimeout(this.warningTimer);
+      this.warningTimer = null;
+    }
+    if (this.sessionTimer) {
+      clearTimeout(this.sessionTimer);
+      this.sessionTimer = null;
+    }
+  }
+
+  private async handleConnectionLoss() {
+    if (!this.isConnected) return;
+
+    this.cleanupAudio();
+
+    if (this.reconnectAttempts < this.maxReconnectAttempts && this.lastConfig) {
+      this.reconnectAttempts++;
+      if (this.onReconnecting) {
+        this.onReconnecting(this.reconnectAttempts);
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      try {
+        await this.establishConnection(this.lastConfig);
+      } catch (e) {
+        console.error('Reconnect attempt failed:', e);
+        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+          if (this.onReconnectFailed) {
+            this.onReconnectFailed();
+          }
+          this.cleanup();
+        } else {
+          this.handleConnectionLoss();
+        }
+      }
+    } else {
+      if (this.reconnectAttempts >= this.maxReconnectAttempts && this.onReconnectFailed) {
+        this.onReconnectFailed();
+      }
+      this.cleanup();
+    }
+  }
+
+  getConnectionQuality(): ConnectionQuality {
+    return this.currentQuality;
+  }
+
+  getSessionDuration(): number {
+    if (!this.connectStartTime) return 0;
+    return Math.floor((Date.now() - this.connectStartTime) / 1000);
+  }
+
+  private updateConnectionQuality() {
+    const now = Date.now();
+    // Keep only gaps from the last 30 seconds
+    const recentGaps = this.audioGapCounts.filter(t => now - t < 30000);
+    this.audioGapCounts = recentGaps;
+
+    let newQuality: ConnectionQuality;
+    if (recentGaps.length >= 5) {
+      newQuality = 'poor';
+    } else if (recentGaps.length >= 2) {
+      newQuality = 'fair';
+    } else {
+      newQuality = 'good';
+    }
+
+    if (newQuality !== this.currentQuality) {
+      this.currentQuality = newQuality;
+      if (this.onConnectionQuality) {
+        this.onConnectionQuality(newQuality);
+      }
     }
   }
 
   async sendText(text: string) {
     if (!this.sessionPromise) return;
 
-    // Add to transcript immediately
     this.transcript.push({ role: 'user', text, timestamp: new Date() });
     if (this.onTranscript) {
       this.onTranscript([...this.transcript]);
     }
 
     const session = await this.sessionPromise;
-    // content part with text
     await session.send({ parts: [{ text }] }, true);
   }
 
@@ -120,7 +251,6 @@ export class GeminiLiveService {
     if (!this.inputAudioContext) return;
 
     this.inputSource = this.inputAudioContext.createMediaStreamSource(stream);
-    // Reduced buffer size to 2048 (approx 128ms) for better latency while maintaining stability
     this.scriptProcessor = this.inputAudioContext.createScriptProcessor(2048, 1, 1);
 
     this.scriptProcessor.onaudioprocess = (e) => {
@@ -130,13 +260,12 @@ export class GeminiLiveService {
       const pcmBlob = createPcmBlob(inputData);
 
       this.sessionPromise.then((session) => {
-        session.sendRealtimeInput({ media: pcmBlob });
+        session.sendRealtimeInput({ audio: pcmBlob });
       });
     };
 
     this.inputSource.connect(this.scriptProcessor);
 
-    // Mute input locally to prevent feedback, but keep the graph alive
     const muteGain = this.inputAudioContext.createGain();
     muteGain.gain.value = 0;
     this.scriptProcessor.connect(muteGain);
@@ -154,45 +283,52 @@ export class GeminiLiveService {
       this.currentOutputText += serverContent.outputTranscription.text;
     }
 
-    // Commit transcript on turn completion
     if (serverContent?.turnComplete) {
       this.commitTranscript();
     }
 
-    // Handle Interruption immediately
     if (serverContent?.interrupted) {
-      console.log("User Interrupted!");
-      this.processingId++; // Invalidate any pending audio decoding
-      this.commitTranscript(); // Commit whatever was said before interruption
+      console.log('User Interrupted!');
+      this.processingId++;
+      this.commitTranscript();
       this.stopAllAudio();
-      return; // Stop processing this message
+      return;
     }
 
     const base64Audio = serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
 
     if (base64Audio) {
+      // Track audio gaps for connection quality
+      const now = Date.now();
+      if (this.lastAudioChunkTime > 0) {
+        const gap = now - this.lastAudioChunkTime;
+        if (gap > 2000) {
+          this.audioGapCounts.push(now);
+          this.updateConnectionQuality();
+        }
+      }
+      this.lastAudioChunkTime = now;
+
       if (!this.outputAudioContext || !this.outputGainNode) {
-        console.warn("Audio received but output context/gain not ready");
+        console.warn('Audio received but output context/gain not ready');
         return;
       }
 
       if (this.outputAudioContext.state === 'suspended') {
-        console.log("Resuming suspended output audio context");
+        console.log('Resuming suspended output audio context');
         await this.outputAudioContext.resume();
       }
 
       try {
-        const currentId = this.processingId; // Capture ID at start of process
+        const currentId = this.processingId;
         const uint8Array = base64ToUint8Array(base64Audio);
         console.log(`Received audio chunk: ${uint8Array.byteLength} bytes`);
 
         const audioBuffer = await decodeAudioData(uint8Array, this.outputAudioContext);
         console.log(`Decoded audio: ${audioBuffer.duration}s`);
 
-        // If an interruption occurred while we were awaiting decodeAudioData, 
-        // processingId will have incremented. We should discard this audio chunk.
         if (currentId !== this.processingId) {
-          console.log("Discarding audio chunk due to interruption");
+          console.log('Discarding audio chunk due to interruption');
           return;
         }
 
@@ -200,13 +336,12 @@ export class GeminiLiveService {
         source.buffer = audioBuffer;
         source.connect(this.outputGainNode);
 
-        const now = this.outputAudioContext.currentTime;
-        // Ensure gapless playback but handle drift
-        if (this.nextStartTime < now) {
-          this.nextStartTime = now;
+        const ctxNow = this.outputAudioContext.currentTime;
+        if (this.nextStartTime < ctxNow) {
+          this.nextStartTime = ctxNow;
         }
 
-        console.log(`Scheduling audio at ${this.nextStartTime} (current: ${now})`);
+        console.log(`Scheduling audio at ${this.nextStartTime} (current: ${ctxNow})`);
         source.start(this.nextStartTime);
         this.nextStartTime += audioBuffer.duration;
 
@@ -215,7 +350,7 @@ export class GeminiLiveService {
           this.audioSources.delete(source);
         };
       } catch (e) {
-        console.error("Error decoding audio chunk", e);
+        console.error('Error decoding audio chunk', e);
       }
     }
   }
@@ -224,12 +359,12 @@ export class GeminiLiveService {
     let changed = false;
     if (this.currentInputText.trim()) {
       this.transcript.push({ role: 'user', text: this.currentInputText.trim(), timestamp: new Date() });
-      this.currentInputText = "";
+      this.currentInputText = '';
       changed = true;
     }
     if (this.currentOutputText.trim()) {
       this.transcript.push({ role: 'model', text: this.currentOutputText.trim(), timestamp: new Date() });
-      this.currentOutputText = "";
+      this.currentOutputText = '';
       changed = true;
     }
 
@@ -242,11 +377,10 @@ export class GeminiLiveService {
     this.audioSources.forEach(source => {
       try {
         source.stop();
-      } catch (e) { } // Ignore if already stopped
+      } catch (e) { }
     });
     this.audioSources.clear();
 
-    // Reset the playback cursor to current time to flush queue
     if (this.outputAudioContext) {
       this.nextStartTime = this.outputAudioContext.currentTime;
     }
@@ -265,7 +399,6 @@ export class GeminiLiveService {
           sum += dataArray[i];
         }
         const average = sum / dataArray.length;
-        // Normalize to 0-1 range roughly
         const vol = Math.min(1, average / 128);
 
         if (this.onVolumeChange) {
@@ -282,8 +415,7 @@ export class GeminiLiveService {
     this.cleanup();
   }
 
-  private cleanup() {
-    this.isConnected = false;
+  private cleanupAudio() {
     this.stopAllAudio();
 
     if (this.inputSource) this.inputSource.disconnect();
@@ -300,7 +432,18 @@ export class GeminiLiveService {
     this.analyzer = null;
     this.inputAudioContext = null;
     this.outputAudioContext = null;
+  }
+
+  private cleanup() {
+    this.isConnected = false;
+    this.clearSessionTimers();
+    this.cleanupAudio();
     this.sessionPromise = null;
+
+    if (this.lastMediaStream) {
+      this.lastMediaStream.getTracks().forEach(t => t.stop());
+      this.lastMediaStream = null;
+    }
 
     if (this.onDisconnect) this.onDisconnect();
   }

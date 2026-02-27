@@ -1,10 +1,10 @@
 export interface BusinessConfig {
   firstName: string;
   lastName: string;
-  phone: string;
   email: string;
-  businessName: string;
-  industry: string;
+  phone?: string;
+  businessName?: string;
+  industry?: string;
   services?: string;
   avgTicketValue?: string;
   userName?: string;

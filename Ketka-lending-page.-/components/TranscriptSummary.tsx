@@ -1,60 +1,42 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { TranscriptItem, BusinessConfig } from '../types';
-import { WEBHOOK_URL } from '../constants';
+import { API_BASE_URL } from '../constants';
+import { submitTranscript } from '../services/webhookService';
 
 interface TranscriptSummaryProps {
   transcript: TranscriptItem[];
   config: BusinessConfig;
   onClose: () => void;
+  callDuration?: number;
 }
 
-export const TranscriptSummary: React.FC<TranscriptSummaryProps> = ({ transcript, config, onClose }) => {
+export const TranscriptSummary: React.FC<TranscriptSummaryProps> = ({ transcript, config, onClose, callDuration = 0 }) => {
   const [webhookStatus, setWebhookStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const hasAttemptedSend = useRef(false);
 
   useEffect(() => {
-    if (WEBHOOK_URL && transcript.length > 0 && !hasAttemptedSend.current) {
+    if (API_BASE_URL && transcript.length > 0 && !hasAttemptedSend.current) {
       sendWebhook();
     }
   }, [transcript]);
 
   const sendWebhook = async () => {
-    if (!WEBHOOK_URL) return;
+    if (!API_BASE_URL) return;
 
     hasAttemptedSend.current = true;
     setWebhookStatus('sending');
 
     try {
-      const payload = {
-        type: 'TRANSCRIPT_SUMMARY',
-        timestamp: new Date().toISOString(),
-        businessName: config.businessName,
-        customerName: config.userName || `${config.firstName} ${config.lastName}`,
-        phone: config.phone,
-        email: config.email,
-        industry: config.industry,
-        services: config.services,
-        avgTicketValue: config.avgTicketValue,
-        transcript: transcript.map(item => `${item.role === 'user' ? 'Customer' : 'AI'}: ${item.text}`).join('\n'),
-        summary: "Conversation from AI Receptionist Demo"
-      };
-
-      const response = await fetch(WEBHOOK_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload)
-      });
+      const response = await submitTranscript(config, transcript, callDuration);
 
       if (response.ok) {
         setWebhookStatus('success');
       } else {
-        console.error("Webhook failed with status:", response.status);
+        console.error('Webhook failed with status:', response.status);
         setWebhookStatus('error');
       }
     } catch (error) {
-      console.error("Webhook error:", error);
+      console.error('Webhook error:', error);
       setWebhookStatus('error');
     }
   };
@@ -79,7 +61,7 @@ export const TranscriptSummary: React.FC<TranscriptSummaryProps> = ({ transcript
         </div>
 
         {/* Webhook Status Bar */}
-        {WEBHOOK_URL && (
+        {API_BASE_URL && (
           <div className={`px-6 py-2 font-mono text-[10px] uppercase tracking-widest flex items-center justify-between border-b border-dark/20 relative z-10 ${webhookStatus === 'success' ? 'bg-signal/10 text-signal' :
             webhookStatus === 'error' ? 'bg-red-50 text-red-600' :
               'bg-dark/5 text-dark/70'
@@ -97,7 +79,7 @@ export const TranscriptSummary: React.FC<TranscriptSummaryProps> = ({ transcript
               </span>
             </div>
             {webhookStatus === 'error' && (
-              <button onClick={() => sendWebhook()} className="underline hover:text-signal">Retry</button>
+              <button onClick={() => { hasAttemptedSend.current = false; sendWebhook(); }} className="underline hover:text-signal">Retry</button>
             )}
           </div>
         )}
@@ -139,10 +121,10 @@ export const TranscriptSummary: React.FC<TranscriptSummaryProps> = ({ transcript
               </svg>
             </div>
             <div>
-              <h3 className="font-mono text-[10px] font-bold text-signal uppercase tracking-widest">Revenue Opportunity</h3>
+              <h3 className="font-mono text-[10px] font-bold text-signal uppercase tracking-widest">Imagine this for your business</h3>
               <p className="font-sans text-sm text-dark/80 mt-1">
-                This transcript demonstrates how the AI captured information automatically.
-                Missed calls like this cost {config.businessName} an estimated <span className="font-mono text-signal bg-signal/10 px-1 font-bold">${config.avgTicketValue}</span> per occurrence.
+                This AI handled bookings, answered questions, and captured caller info — all automatically.
+                Every missed call is a lost customer. Book a call below to set this up for your business.
               </p>
             </div>
           </div>

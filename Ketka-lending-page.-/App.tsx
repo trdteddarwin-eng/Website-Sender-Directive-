@@ -6,6 +6,7 @@ import { ActiveCall } from './components/ActiveCall';
 import { TranscriptSummary } from './components/TranscriptSummary';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChatWidget } from './components/ChatWidget';
+import { canStartDemo, recordDemoStart, getRemainingCooldown } from './utils/rateLimit';
 import Cal, { getCalApi } from "@calcom/embed-react";
 
 const App: React.FC = () => {
@@ -13,14 +14,17 @@ const App: React.FC = () => {
   const [config, setConfig] = useState<BusinessConfig | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<TranscriptItem[]>([]);
+  const [callDuration, setCallDuration] = useState(0);
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
 
-  // Use ref to keep the service singleton across renders
   const liveServiceRef = useRef<GeminiLiveService | null>(null);
+  const callStartRef = useRef<number>(0);
 
   useEffect(() => {
     liveServiceRef.current = new GeminiLiveService();
 
-    // Bind the transcript callback
     liveServiceRef.current.onTranscript = (newTranscript) => {
       setTranscript(newTranscript);
     };
@@ -30,20 +34,79 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // Cooldown timer
+  useEffect(() => {
+    if (cooldownRemaining <= 0) return;
+    const interval = setInterval(() => {
+      const remaining = getRemainingCooldown();
+      setCooldownRemaining(remaining);
+      if (remaining <= 0) clearInterval(interval);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [cooldownRemaining]);
+
+  const formatCooldown = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}m ${secs.toString().padStart(2, '0')}s`;
+  };
+
   const handleSetupComplete = async (newConfig: BusinessConfig) => {
+    // Rate limit check
+    if (!canStartDemo()) {
+      const remaining = getRemainingCooldown();
+      setCooldownRemaining(remaining);
+      setErrorMsg(`Demo cooldown active. Please wait ${formatCooldown(remaining)} before trying again.`);
+      return;
+    }
+
     setConfig(newConfig);
     setAppState(AppState.CONNECTING);
     setErrorMsg(null);
-    setTranscript([]); // Reset transcript for new call
+    setTranscript([]);
+    setIsReconnecting(false);
+    setReconnectAttempt(0);
 
     try {
       if (liveServiceRef.current) {
+        // Wire up session callbacks
+        liveServiceRef.current.onTimeout = (info) => {
+          if (info.warning) {
+            // 4-min warning — tell the AI to wrap up naturally
+            liveServiceRef.current?.sendText(
+              "[SYSTEM] We're approaching the 5-minute mark. Please naturally wrap up the conversation. Say something like 'Well it was great chatting with you! Is there anything else I can help with before we hang up?'"
+            );
+          }
+          if (info.disconnected) {
+            // 5-min auto-disconnect — go to summary with calendar
+            setCallDuration(300);
+            setAppState(AppState.SUMMARY);
+          }
+        };
+
+        liveServiceRef.current.onReconnecting = (attempt) => {
+          setIsReconnecting(true);
+          setReconnectAttempt(attempt);
+        };
+
+        liveServiceRef.current.onReconnectFailed = () => {
+          setIsReconnecting(false);
+          setErrorMsg("Connection lost. The call has ended.");
+          setAppState(AppState.SUMMARY);
+        };
+
+        liveServiceRef.current.onConnectionQuality = (quality) => {
+          console.log('Connection quality:', quality);
+        };
+
         await liveServiceRef.current.connect(newConfig);
         setAppState(AppState.ACTIVE);
+        recordDemoStart();
+        callStartRef.current = Date.now();
 
         // Trigger the AI to speak first
         setTimeout(() => {
-          liveServiceRef.current?.sendText("The user has connected. Please greet them now.");
+          liveServiceRef.current?.sendText("[SYSTEM] The caller has connected. Greet them now.");
         }, 100);
       }
     } catch (e) {
@@ -55,9 +118,9 @@ const App: React.FC = () => {
 
   const handleEndCall = () => {
     if (liveServiceRef.current) {
+      setCallDuration(Math.floor((Date.now() - callStartRef.current) / 1000));
       liveServiceRef.current.disconnect();
     }
-    // Transition to Summary instead of Setup
     setAppState(AppState.SUMMARY);
   };
 
@@ -89,21 +152,17 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Determine if we should show the full screen overlay
   const isOverlayVisible = appState !== AppState.IDLE;
 
   return (
-    // Main Container: 
-    // - Always rendered to host ChatWidget
-    // - Background only present when overlay is active
     <div className={`fixed inset-0 z-[9999] overflow-y-auto font-sans transition-colors duration-300 ${isOverlayVisible ? 'bg-paper pointer-events-auto' : 'bg-transparent pointer-events-none'}`}>
 
-      {/* Chat Widget - Always Visible & Interactive */}
+      {/* Chat Widget */}
       <div className="fixed bottom-6 right-6 z-[10000] pointer-events-auto">
         <ChatWidget />
       </div>
 
-      {/* Header - Only visible when overlay is active */}
+      {/* Header */}
       <header className={`p-4 md:p-6 flex items-center justify-between border-b border-dark/20 bg-offwhite/90 backdrop-blur-sm fixed top-0 w-full z-50 transition-opacity duration-300 ${isOverlayVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-dark rounded-none flex items-center justify-center">
@@ -117,7 +176,6 @@ const App: React.FC = () => {
           <div className="font-mono text-[10px] uppercase tracking-widest px-3 py-1 bg-dark/5 text-dark/70 border border-dark/10 hidden sm:block">
             Powered by Gemini 2.5
           </div>
-          {/* Close button to go back to landing page */}
           <button
             onClick={() => {
               if (liveServiceRef.current) {
@@ -140,7 +198,7 @@ const App: React.FC = () => {
       {/* Main Content */}
       <main className={`pt-20 pb-8 px-4 flex flex-col items-center min-h-screen relative transition-opacity duration-300 ${isOverlayVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
 
-        {/* Background Animation (Removed soft glowing orbs, added SVG noise and grid) */}
+        {/* Background */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none z-[-1]">
           {isOverlayVisible && <div className="hiw-noise opacity-50"></div>}
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#11111105_1px,transparent_1px),linear-gradient(to_bottom,#11111105_1px,transparent_1px)] bg-[size:32px_32px]"></div>
@@ -155,6 +213,9 @@ const App: React.FC = () => {
               className="mb-8 p-4 bg-signal border border-dark text-paper max-w-md text-center font-mono text-xs uppercase tracking-widest z-10 pointer-events-auto"
             >
               {errorMsg}
+              {cooldownRemaining > 0 && (
+                <div className="mt-2 font-bold">{formatCooldown(cooldownRemaining)}</div>
+              )}
             </motion.div>
           )}
 
@@ -191,22 +252,16 @@ const App: React.FC = () => {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
               transition={{ duration: 0.5 }}
-              className="w-full z-10 flex flex-col items-center gap-8 pointer-events-auto"
+              className="w-full z-10 flex flex-col items-center pointer-events-auto"
             >
               <ActiveCall
                 config={config}
                 service={liveServiceRef.current}
                 onEndCall={handleEndCall}
+                transcript={transcript}
+                isReconnecting={isReconnecting}
+                reconnectAttempt={reconnectAttempt}
               />
-
-              <div className="w-full max-w-4xl h-[600px] bg-paper overflow-hidden border border-dark shadow-md p-2">
-                <Cal
-                  namespace="30min"
-                  calLink="ted-charles-enqyjn/30min"
-                  style={{ width: "100%", height: "100%", overflow: "scroll" }}
-                  config={{ layout: "month_view" }}
-                />
-              </div>
             </motion.div>
           )}
 
@@ -223,27 +278,36 @@ const App: React.FC = () => {
                 transcript={transcript}
                 config={config}
                 onClose={handleCloseSummary}
+                callDuration={callDuration}
               />
+
+              {/* Calendar — only shown after call ends */}
+              <motion.div
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.5 }}
+                className="w-full max-w-4xl mx-auto mt-8"
+              >
+                <div className="text-center mb-4">
+                  <h3 className="font-heading text-xl font-bold text-dark uppercase tracking-tighter">
+                    Want this for your business?
+                  </h3>
+                  <p className="font-mono text-[10px] text-dark/50 uppercase tracking-widest mt-1">
+                    Book a call to get started
+                  </p>
+                </div>
+                <div className="h-[400px] md:h-[600px] bg-paper overflow-hidden border border-dark shadow-[4px_4px_0px_#111111] p-2">
+                  <Cal
+                    namespace="30min"
+                    calLink="ted-charles-enqyjn/30min"
+                    style={{ width: "100%", height: "100%", overflow: "scroll" }}
+                    config={{ layout: "month_view" }}
+                  />
+                </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Bottom Embed - Only show when NOT in ACTIVE state to avoid duplication if desired, or keep it. 
-            The user said "duplicate that", so having it twice might be what they want, or maybe they want it visible during the demo.
-            If I keep it here, it will be at the bottom.
-            If I put it in ACTIVE state, it will be in the middle.
-            I'll keep this one here as it acts as a footer for the app.
-        */}
-        {appState !== AppState.ACTIVE && appState !== AppState.IDLE && (
-          <div className="w-full max-w-4xl mt-12 z-10 pointer-events-auto">
-            <Cal
-              namespace="30min"
-              calLink="ted-charles-enqyjn/30min"
-              style={{ width: "100%", height: "100%", overflow: "scroll" }}
-              config={{ layout: "month_view" }}
-            />
-          </div>
-        )}
       </main>
     </div>
   );

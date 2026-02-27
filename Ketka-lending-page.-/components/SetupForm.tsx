@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { BusinessConfig, AppState } from '../types';
-import { DEFAULT_SERVICES, WEBHOOK_URL } from '../constants';
+import { BusinessConfig } from '../types';
+import { API_BASE_URL } from '../constants';
+import { submitLead, testWebhook } from '../services/webhookService';
 import { motion } from 'framer-motion';
 
 interface SetupFormProps {
@@ -9,43 +10,25 @@ interface SetupFormProps {
 }
 
 export const SetupForm: React.FC<SetupFormProps> = ({ onComplete, isLoading }) => {
-  const [config, setConfig] = useState<BusinessConfig>({
-    firstName: '',
-    lastName: '',
-    phone: '',
-    email: '',
-    businessName: '',
-    industry: '',
-    services: DEFAULT_SERVICES,
-    avgTicketValue: '150'
-  });
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
   const [testStatus, setTestStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (config.firstName && config.businessName && config.industry) {
-      // Send initial lead data to webhook
-      if (WEBHOOK_URL) {
+    if (firstName && lastName && email) {
+      const config: BusinessConfig = {
+        firstName,
+        lastName,
+        email,
+      };
+
+      if (API_BASE_URL) {
         try {
-          await fetch(WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type: 'LEAD_SUBMISSION',
-              timestamp: new Date().toISOString(),
-              businessName: config.businessName,
-              customerName: `${config.firstName} ${config.lastName}`.trim(),
-              phone: config.phone,
-              email: config.email,
-              industry: config.industry,
-              avgTicketValue: config.avgTicketValue,
-              services: config.services,
-              summary: "New lead submitted from demo setup form."
-            })
-          });
+          await submitLead(config);
         } catch (error) {
-          console.error("Failed to send lead webhook:", error);
-          // Continue anyway
+          console.error('Failed to send lead webhook:', error);
         }
       }
       onComplete(config);
@@ -54,26 +37,11 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onComplete, isLoading }) =
 
   const handleTestWebhook = async (e: React.MouseEvent) => {
     e.preventDefault();
-    if (!WEBHOOK_URL) return;
+    if (!API_BASE_URL) return;
 
     setTestStatus('sending');
     try {
-      const response = await fetch(WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'TEST_EVENT',
-          timestamp: new Date().toISOString(),
-          businessName: config.businessName || "Test Business",
-          customerName: `${config.firstName} ${config.lastName}`.trim() || "Test User",
-          phone: config.phone,
-          email: config.email,
-          avgTicketValue: config.avgTicketValue,
-          transcript: "Customer: This is a test message to verify the integration.\nAI: Connection successful.",
-          summary: "This is a test event generated from the setup screen."
-        })
-      });
-
+      const response = await testWebhook();
       if (response.ok) {
         setTestStatus('success');
         setTimeout(() => setTestStatus('idle'), 3000);
@@ -119,11 +87,11 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onComplete, isLoading }) =
           </svg>
         </div>
         <h1 className="font-heading text-2xl md:text-3xl font-bold text-dark mb-2 tracking-tighter uppercase">Try the AI Receptionist</h1>
-        <p className="font-mono text-[10px] text-dark/50 uppercase tracking-widest">Fill in your info for a personalized demo.</p>
+        <p className="font-mono text-[10px] text-dark/50 uppercase tracking-widest">Talk to our AI receptionist live. See what it can do.</p>
       </motion.div>
 
       <form onSubmit={handleSubmit} className="space-y-5 relative z-10">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <motion.div variants={itemVariants}>
             <label className="block font-mono text-[10px] font-bold text-dark/70 uppercase tracking-widest mb-1.5">First Name</label>
             <input
@@ -131,8 +99,8 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onComplete, isLoading }) =
               required
               className="w-full px-4 py-3 bg-paper border border-dark/20 rounded-none focus:border-dark focus:ring-1 focus:ring-dark text-dark placeholder-dark/30 transition-all outline-none font-sans text-sm"
               placeholder="Alex"
-              value={config.firstName}
-              onChange={(e) => setConfig({ ...config, firstName: e.target.value })}
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
             />
           </motion.div>
           <motion.div variants={itemVariants}>
@@ -142,84 +110,21 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onComplete, isLoading }) =
               required
               className="w-full px-4 py-3 bg-paper border border-dark/20 rounded-none focus:border-dark focus:ring-1 focus:ring-dark text-dark placeholder-dark/30 transition-all outline-none font-sans text-sm"
               placeholder="Smith"
-              value={config.lastName}
-              onChange={(e) => setConfig({ ...config, lastName: e.target.value })}
-            />
-          </motion.div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <motion.div variants={itemVariants}>
-            <label className="block font-mono text-[10px] font-bold text-dark/70 uppercase tracking-widest mb-1.5">Phone</label>
-            <input
-              type="tel"
-              required
-              className="w-full px-4 py-3 bg-paper border border-dark/20 rounded-none focus:border-dark focus:ring-1 focus:ring-dark text-dark placeholder-dark/30 transition-all outline-none font-sans text-sm"
-              placeholder="+1 555 000 0000"
-              value={config.phone}
-              onChange={(e) => setConfig({ ...config, phone: e.target.value })}
-            />
-          </motion.div>
-          <motion.div variants={itemVariants}>
-            <label className="block font-mono text-[10px] font-bold text-dark/70 uppercase tracking-widest mb-1.5">Email</label>
-            <input
-              type="email"
-              required
-              className="w-full px-4 py-3 bg-paper border border-dark/20 rounded-none focus:border-dark focus:ring-1 focus:ring-dark text-dark placeholder-dark/30 transition-all outline-none font-sans text-sm"
-              placeholder="alex@example.com"
-              value={config.email}
-              onChange={(e) => setConfig({ ...config, email: e.target.value })}
-            />
-          </motion.div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <motion.div variants={itemVariants}>
-            <label className="block font-mono text-[10px] font-bold text-dark/70 uppercase tracking-widest mb-1.5">Business Name</label>
-            <input
-              type="text"
-              required
-              className="w-full px-4 py-3 bg-paper border border-dark/20 rounded-none focus:border-dark focus:ring-1 focus:ring-dark text-dark placeholder-dark/30 transition-all outline-none font-sans text-sm"
-              placeholder="Elite Dental"
-              value={config.businessName}
-              onChange={(e) => setConfig({ ...config, businessName: e.target.value })}
-            />
-          </motion.div>
-          <motion.div variants={itemVariants}>
-            <label className="block font-mono text-[10px] font-bold text-dark/70 uppercase tracking-widest mb-1.5">Industry</label>
-            <input
-              type="text"
-              required
-              className="w-full px-4 py-3 bg-paper border border-dark/20 rounded-none focus:border-dark focus:ring-1 focus:ring-dark text-dark placeholder-dark/30 transition-all outline-none font-sans text-sm"
-              placeholder="Dentistry"
-              value={config.industry}
-              onChange={(e) => setConfig({ ...config, industry: e.target.value })}
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
             />
           </motion.div>
         </div>
 
         <motion.div variants={itemVariants}>
-          <label className="block font-mono text-[10px] font-bold text-dark/70 uppercase tracking-widest mb-1.5">Avg. Customer Value ($)</label>
-          <div className="relative">
-            <span className="absolute left-4 top-3 text-dark/50 font-mono">$</span>
-            <input
-              type="number"
-              required
-              className="w-full pl-8 pr-4 py-3 bg-paper border border-dark/20 rounded-none focus:border-dark focus:ring-1 focus:ring-dark text-dark placeholder-dark/30 transition-all outline-none font-sans text-sm"
-              placeholder="150"
-              value={config.avgTicketValue}
-              onChange={(e) => setConfig({ ...config, avgTicketValue: e.target.value })}
-            />
-          </div>
-          <p className="text-xs text-dark/40 mt-2 font-sans">Used to calculate potential lost revenue.</p>
-        </motion.div>
-
-        <motion.div variants={itemVariants}>
-          <label className="block font-mono text-[10px] font-bold text-dark/70 uppercase tracking-widest mb-1.5">Key Services (Comma separated)</label>
-          <textarea
-            className="w-full px-4 py-3 bg-paper border border-dark/20 rounded-none focus:border-dark focus:ring-1 focus:ring-dark text-dark placeholder-dark/30 transition-all outline-none font-sans text-sm min-h-[80px]"
-            value={config.services}
-            onChange={(e) => setConfig({ ...config, services: e.target.value })}
+          <label className="block font-mono text-[10px] font-bold text-dark/70 uppercase tracking-widest mb-1.5">Email</label>
+          <input
+            type="email"
+            required
+            className="w-full px-4 py-3 bg-paper border border-dark/20 rounded-none focus:border-dark focus:ring-1 focus:ring-dark text-dark placeholder-dark/30 transition-all outline-none font-sans text-sm"
+            placeholder="alex@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
           />
         </motion.div>
 

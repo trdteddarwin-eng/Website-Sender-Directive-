@@ -5,9 +5,14 @@ interface VisualizerProps {
   volume: number; // 0 to 1
 }
 
+const SIGNAL_RED = '#E63B2E';
+const DARK = '#111111';
+const BAR_COUNT = 10;
+
 export const Visualizer: React.FC<VisualizerProps> = ({ isActive, volume }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  
+  const smoothedVolumeRef = useRef(0);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -15,47 +20,75 @@ export const Visualizer: React.FC<VisualizerProps> = ({ isActive, volume }) => {
     if (!ctx) return;
 
     let animationId: number;
-    let hue = 0;
+    let pulsePhase = 0;
 
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // Dynamic center circle size
-      const baseRadius = 50;
-      const dynamicRadius = baseRadius + (volume * 80); // Grows with volume
-      
+
+      // Smooth volume with exponential decay
+      smoothedVolumeRef.current = smoothedVolumeRef.current * 0.85 + volume * 0.15;
+      const sv = smoothedVolumeRef.current;
+
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
+      const baseRadius = 50;
 
-      // Draw glow
-      const gradient = ctx.createRadialGradient(centerX, centerY, baseRadius * 0.5, centerX, centerY, dynamicRadius * 1.5);
-      gradient.addColorStop(0, `hsla(${hue}, 80%, 60%, 0.8)`);
-      gradient.addColorStop(0.5, `hsla(${hue}, 80%, 60%, 0.2)`);
-      gradient.addColorStop(1, `hsla(${hue}, 80%, 60%, 0)`);
+      // Central circle with subtle pulse
+      pulsePhase += 0.03;
+      const pulseScale = 1 + (isActive ? Math.sin(pulsePhase) * 0.05 * (1 + sv) : 0);
+      const coreRadius = baseRadius * pulseScale;
 
-      ctx.fillStyle = gradient;
+      // Glow behind center
+      const glow = ctx.createRadialGradient(centerX, centerY, coreRadius * 0.5, centerX, centerY, coreRadius * 2);
+      glow.addColorStop(0, `rgba(230, 59, 46, ${0.15 + sv * 0.2})`);
+      glow.addColorStop(1, 'rgba(230, 59, 46, 0)');
+      ctx.fillStyle = glow;
       ctx.beginPath();
-      ctx.arc(centerX, centerY, dynamicRadius * 1.5, 0, Math.PI * 2);
+      ctx.arc(centerX, centerY, coreRadius * 2, 0, Math.PI * 2);
       ctx.fill();
 
-      // Draw Core
-      ctx.fillStyle = `hsla(${hue + 30}, 90%, 95%, 1)`;
+      // Central filled circle
+      ctx.fillStyle = DARK;
       ctx.beginPath();
-      ctx.arc(centerX, centerY, isActive ? baseRadius + (volume * 10) : baseRadius, 0, Math.PI * 2);
+      ctx.arc(centerX, centerY, coreRadius, 0, Math.PI * 2);
       ctx.fill();
 
-      // Ripple effect lines
-      if (isActive && volume > 0.05) {
-         ctx.strokeStyle = `hsla(${hue}, 70%, 70%, 0.5)`;
-         ctx.lineWidth = 2;
-         for(let i=1; i<=3; i++) {
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, dynamicRadius + (i * 20), 0, Math.PI * 2);
-            ctx.stroke();
-         }
+      // Inner ring accent
+      ctx.strokeStyle = SIGNAL_RED;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, coreRadius + 3, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Radial bar segments
+      if (isActive) {
+        const barInnerRadius = coreRadius + 10;
+        const maxBarHeight = 60;
+        const barWidth = (Math.PI * 2) / BAR_COUNT - 0.08; // gap between bars
+
+        for (let i = 0; i < BAR_COUNT; i++) {
+          const angle = (i / BAR_COUNT) * Math.PI * 2 - Math.PI / 2;
+
+          // Each bar has slightly different height based on volume + pseudo-random variation
+          const variation = Math.sin(pulsePhase * 2 + i * 1.3) * 0.3 + 0.7;
+          const barHeight = maxBarHeight * sv * variation;
+
+          if (barHeight < 2) continue;
+
+          const outerRadius = barInnerRadius + barHeight;
+
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, barInnerRadius, angle, angle + barWidth);
+          ctx.arc(centerX, centerY, outerRadius, angle + barWidth, angle, true);
+          ctx.closePath();
+
+          // Gradient from signal red (base) to dark (tip)
+          const opacity = 0.6 + sv * 0.4;
+          ctx.fillStyle = `rgba(230, 59, 46, ${opacity})`;
+          ctx.fill();
+        }
       }
 
-      hue = (hue + 0.5) % 360;
       animationId = requestAnimationFrame(draw);
     };
 
@@ -67,10 +100,10 @@ export const Visualizer: React.FC<VisualizerProps> = ({ isActive, volume }) => {
   }, [isActive, volume]);
 
   return (
-    <canvas 
-      ref={canvasRef} 
-      width={400} 
-      height={400} 
+    <canvas
+      ref={canvasRef}
+      width={400}
+      height={400}
       className="w-full max-w-[400px] h-auto mx-auto"
     />
   );
