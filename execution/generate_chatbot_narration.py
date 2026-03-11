@@ -1,98 +1,66 @@
 #!/usr/bin/env python3
 """
-Generate narration audio for AI Chatbot video using ElevenLabs TTS.
+Generate narration audio for AI Chatbot video via KIE API.
 
 Usage:
-  python execution/generate_chatbot_narration.py
+  python3 execution/generate_chatbot_narration.py
 
 Output:
   yt-growth-chart/public/narration-chatbot/scene_00.mp3 ... scene_14.mp3
 """
 
 import os
-import time
-import requests
+import sys
 
-ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "sk_19970146a3f8d3964e93feb3aff4acb54b2732be03e2cf5c")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from kie_utils import generate_narration
+
 OUTPUT_DIR = "yt-growth-chart/public/narration-chatbot"
 
-# Voice: Roger (CwhRBWXzGAHq8TQ4Fs17)
-VOICE_ID = "CwhRBWXzGAHq8TQ4Fs17"
-MODEL_ID = "eleven_multilingual_v2"
-
-# Scene narration texts (speakable — no special characters, numbers spelled out)
 SCENES = [
-    "Your customers are waiting for a reply",
-    "Average response time? Twelve hours.",
-    "Sixty percent of customers won't wait that long",
-    "Bad support kills repeat business",
-    "What if AI answered every ticket instantly?",
-    "It reads the message. Understands the intent.",
-    "Pulls the right answer from your knowledge base",
-    "Resolves eighty percent of tickets automatically",
-    "Escalates complex issues to your team",
-    "Customers get answers in under thirty seconds",
-    "Works in every language across all channels",
-    "Handles thousands of tickets simultaneously",
-    "Your competitors already have this running",
-    "Every unanswered ticket is a lost customer",
-    "DM chatbot to get your AI support agent",
+    "[matter-of-fact] Someone lands on your website at two AM. They're interested — credit card practically OUT.",
+    "[matter-of-fact] They type a question into your chat box... and nothing. No one's there.",
+    "[serious] Ten seconds go by. Twenty. [pause] They close the tab.",
+    "[serious] Gone. -- -- You never even knew they were there.",
+    "[matter-of-fact] Here's the painful part — fifty-three percent of visitors bounce if no one replies within TEN seconds.",
+    "[serious] That's not a support problem. That's a revenue LEAK.",
+    "[excited] So we built something. An AI that sits on your site — twenty-four seven — and actually SELLS.",
+    "[confident] A visitor asks about pricing? It pulls your real numbers. Gives a straight answer.",
+    "[confident] Someone's comparing you to a competitor? It handles the OBJECTION — live, in the chat.",
+    "[excited] It captures their name, email, and books the meeting — all inside the CONVERSATION.",
+    "[matter-of-fact] No forms. No friction. Just a visitor who came curious and left with an appointment on your calendar.",
+    "[matter-of-fact] One med spa added this to their site. [pause] Thirty-five percent more consultations booked — in the first MONTH.",
+    "[excited] That's leads that were already coming to their site... just finally getting CAUGHT.",
+    "[serious] Every hour your site runs without this, qualified buyers are landing, looking around... and walking away with their wallets.",
+    "[excited] DM chatbot — and stop losing the leads you already PAID for.",
 ]
-
-
-def generate_scene_audio(text, output_path):
-    """Generate TTS audio for a single scene."""
-    resp = requests.post(
-        f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}",
-        headers={
-            "xi-api-key": ELEVENLABS_API_KEY,
-            "Content-Type": "application/json",
-        },
-        json={
-            "text": text,
-            "model_id": MODEL_ID,
-            "voice_settings": {
-                "stability": 0.6,
-                "similarity_boost": 0.75,
-                "style": 0.3,
-            },
-        },
-        timeout=60,
-    )
-    resp.raise_for_status()
-
-    with open(output_path, "wb") as f:
-        f.write(resp.content)
-
-    return len(resp.content) / 1024
 
 
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+    print(f"Generating narration for {len(SCENES)} scenes via KIE API...")
+    print(f"Voice: Liam (elevenlabs/text-to-dialogue-v3)\n")
 
-    print(f"Generating narration for {len(SCENES)} scenes using Roger voice...")
-    print(f"Voice ID: {VOICE_ID}")
-    print(f"Model: {MODEL_ID}\n")
-
+    durations = []
     for i, text in enumerate(SCENES):
         output_path = os.path.join(OUTPUT_DIR, f"scene_{i:02d}.mp3")
-
         if os.path.exists(output_path):
             print(f"  Scene {i:2d}: already exists, skipping")
             continue
+        clean = text.replace("[", "").replace("]", "")[:50]
+        print(f"  Scene {i:2d}: \"{clean}\"", end="", flush=True)
+        dur = generate_narration(text, output_path)
+        if dur:
+            durations.append(round(dur, 3))
+            print(f" -> {dur:.2f}s")
+        else:
+            durations.append(3.0)
+            print(" FAILED")
 
-        print(f"  Scene {i:2d}: \"{text[:50]}\"", end="", flush=True)
-        try:
-            size = generate_scene_audio(text, output_path)
-            print(f" -> {size:.1f}KB")
-        except Exception as e:
-            print(f" FAILED: {e}")
-            continue
-
-        time.sleep(0.3)
-
-    generated = [f for f in os.listdir(OUTPUT_DIR) if f.endswith(".mp3")]
-    print(f"\nDone! Generated {len(generated)}/{len(SCENES)} narration files in {OUTPUT_DIR}/")
+    total = len([f for f in os.listdir(OUTPUT_DIR) if f.endswith(".mp3")])
+    print(f"\nDone! {total}/{len(SCENES)} narration files in {OUTPUT_DIR}/")
+    if durations:
+        print(f"AUDIO_DURATIONS = [{', '.join(str(d) for d in durations)}]")
 
 
 if __name__ == "__main__":

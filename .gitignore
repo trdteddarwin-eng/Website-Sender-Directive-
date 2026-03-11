@@ -13,6 +13,7 @@ node_modules/
 .DS_Store
 
 # IDE / agent configs
+.obsidian/
 .claude/
 .cursor/
 .agent/
@@ -58,6 +59,7 @@ yt-growth-chart/
 *.png
 *.jpg
 *.mp4
+!Ketka-lending-page.-/public/videos/*.mp4
 *.json.bak
 hf_*.png
 n8n_*.json
